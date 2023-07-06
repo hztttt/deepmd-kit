@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 import logging
 from typing import (
     List,
@@ -22,6 +23,14 @@ from deepmd.fit.fitting import (
 )
 from deepmd.infer import (
     DeepPotential,
+)
+from deepmd.loss.ener import (
+    EnerDipoleLoss,
+    EnerSpinLoss,
+    EnerStdLoss,
+)
+from deepmd.loss.loss import (
+    Loss,
 )
 from deepmd.nvnmd.fit.ener import (
     one_layer_nvnmd,
@@ -137,6 +146,7 @@ class EnerFitting(Fitting):
         layer_name: Optional[List[Optional[str]]] = None,
         use_aparam_as_mask: bool = False,
         spin: Optional[Spin] = None,
+        **kwargs,
     ) -> None:
         """Constructor."""
         # model param
@@ -274,11 +284,11 @@ class EnerFitting(Fitting):
             # In this situation, we directly use these assigned energies instead of computing stats.
             # This will make the loss decrease quickly
             assigned_atom_ener = np.array(
-                list(ee for ee in self.atom_ener_v if ee is not None)
+                [ee for ee in self.atom_ener_v if ee is not None]
             )
-            assigned_ener_idx = list(
-                (ii for ii, ee in enumerate(self.atom_ener_v) if ee is not None)
-            )
+            assigned_ener_idx = [
+                ii for ii, ee in enumerate(self.atom_ener_v) if ee is not None
+            ]
             # np.dot out size: nframe
             sys_ener -= np.dot(sys_tynatom[:, assigned_ener_idx], assigned_atom_ener)
             sys_tynatom[:, assigned_ener_idx] = 0.0
@@ -870,3 +880,29 @@ class EnerFitting(Fitting):
         """
         self.mixed_prec = mixed_prec
         self.fitting_precision = get_precision(mixed_prec["output_prec"])
+
+    def get_loss(self, loss: dict, lr) -> Loss:
+        """Get the loss function.
+
+        Parameters
+        ----------
+        loss : dict
+            The loss function parameters.
+        lr : LearningRateExp
+            The learning rate.
+
+        Returns
+        -------
+        Loss
+            The loss function.
+        """
+        _loss_type = loss.pop("type", "ener")
+        loss["starter_learning_rate"] = lr.start_lr()
+        if _loss_type == "ener":
+            return EnerStdLoss(**loss)
+        elif _loss_type == "ener_dipole":
+            return EnerDipoleLoss(**loss)
+        elif _loss_type == "ener_spin":
+            return EnerSpinLoss(**loss, use_spin=self.spin.use_spin)
+        else:
+            raise RuntimeError("unknown loss type")

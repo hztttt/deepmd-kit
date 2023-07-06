@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 from typing import (
     Optional,
 )
@@ -45,6 +46,7 @@ class EnerStdLoss(Loss):
         limit_pref_pf: float = 0.0,
         relative_f: Optional[float] = None,
         enable_atom_ener_coeff: bool = False,
+        **kwargs,
     ) -> None:
         self.starter_learning_rate = starter_learning_rate
         self.start_pref_e = start_pref_e

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 /*
 //==================================================
  _   _  __     __  _   _   __  __   ____
@@ -364,6 +365,10 @@ class ProdEnvMatANvnmdQuantizeOp : public OpKernel {
       // no pbc
       assert(nloc == nall);
       nei_mode = -1;
+    } else if (mesh_tensor.shape().dim_size(0) == 7 ||
+               mesh_tensor.shape().dim_size(0) == 1) {
+      throw deepmd::deepmd_exception(
+          "Mixed types are not supported by this OP.");
     } else {
       throw deepmd::deepmd_exception("invalid mesh tensor");
     }
@@ -448,7 +453,9 @@ class ProdEnvMatANvnmdQuantizeOp : public OpKernel {
             em, em_deriv, rij, nlist, coord, type, inlist, max_nbor_size, avg,
             std, nloc, frame_nall, rcut_r, rcut_r_smth, sec_a);
         // do nlist mapping if coords were copied
-        if (b_nlist_map) _map_nlist_cpu(nlist, &idx_mapping[0], nloc, nnei);
+        if (b_nlist_map) {
+          _map_nlist_cpu(nlist, &idx_mapping[0], nloc, nnei);
+        }
       }
     }
   }

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """DeePMD training entrypoint script.
 
 Can handle local or distributed training.
@@ -260,6 +261,9 @@ def _do_work(jdata: Dict[str, Any], run_opt: RunOptions, is_compress: bool = Fal
                         valid_data[data_systems].print_summary(
                             f"validation in {data_systems}"
                         )
+    else:
+        if modifier is not None:
+            modifier.build_fv_graph()
 
     # get training info
     stop_batch = j_must_have(jdata["training"], "numb_steps")
