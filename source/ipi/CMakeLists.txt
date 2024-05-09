@@ -14,7 +14,7 @@ add_executable(${ipiname} ${DRIVER_SOURCE_FILES})
 # link: libdeepmd_cc
 if(DP_USING_C_API)
   # SimulationRegion.h
-  target_link_libraries(${ipiname} PRIVATE ${LIB_DEEPMD_C} ${LIB_DEEPMD})
+  target_link_libraries(${ipiname} PRIVATE ${LIB_DEEPMD_C})
   target_precompile_headers(${ipiname} PRIVATE [["deepmd.hpp"]])
   remove_definitions(-D_GLIBCXX_USE_CXX11_ABI=${OP_CXX_ABI})
 else()
@@ -24,11 +24,7 @@ endif()
 target_link_libraries(${ipiname} PRIVATE ${libipiname})
 target_include_directories(${ipiname}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/)
-if(BUILD_PY_IF)
-  set(LIB_DIR op)
-else(BUILD_PY_IF)
-  set(LIB_DIR lib)
-endif(BUILD_PY_IF)
+set(LIB_DIR lib)
 
 if(BUILD_PY_IF AND TENSORFLOW_LINK_LIBPYTHON)
   # ignore undefined reference for libpython
@@ -48,13 +44,13 @@ if(APPLE)
     ${ipiname}
     PROPERTIES LINK_FLAGS "${extra_link_flags}"
                INSTALL_RPATH
-               "@loader_path/../${LIB_DIR}:${TensorFlow_LIBRARY_PATH}")
+               "@loader_path/../${LIB_DIR};${BACKEND_LIBRARY_PATH}")
 else()
   set_target_properties(
     ${ipiname}
     PROPERTIES LINK_FLAGS
                "-Wl,-rpath,'$ORIGIN'/../${LIB_DIR} ${extra_link_flags}"
-               INSTALL_RPATH "$ORIGIN/../${LIB_DIR}:${TensorFlow_LIBRARY_PATH}")
+               INSTALL_RPATH "$ORIGIN/../${LIB_DIR};${BACKEND_LIBRARY_PATH}")
 endif()
 
 if(CMAKE_TESTING_ENABLED)
@@ -63,8 +59,8 @@ if(CMAKE_TESTING_ENABLED)
 endif()
 
 if(BUILD_PY_IF)
-  install(TARGETS ${libipiname} DESTINATION deepmd/op/)
-  install(TARGETS ${ipiname} DESTINATION deepmd/op/)
+  install(TARGETS ${libipiname} DESTINATION deepmd/lib/)
+  install(TARGETS ${ipiname} DESTINATION deepmd/lib/)
 else(BUILD_PY_IF)
   install(TARGETS ${libipiname} DESTINATION lib/)
   install(TARGETS ${ipiname} DESTINATION bin/)

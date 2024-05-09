@@ -6,6 +6,7 @@ from pathlib import (
 )
 from typing import (
     TYPE_CHECKING,
+    ClassVar,
     Dict,
     List,
     Optional,
@@ -18,8 +19,8 @@ from ase.calculators.calculator import (
     all_changes,
 )
 
-from deepmd import (
-    DeepPotential,
+from deepmd.infer import (
+    DeepPot,
 )
 
 if TYPE_CHECKING:
@@ -44,13 +45,15 @@ class DP(Calculator):
     type_dict : Dict[str, int], optional
         mapping of element types and their numbers, best left None and the calculator
         will infer this information from model, by default None
+    neighbor_list : ase.neighborlist.NeighborList, optional
+        The neighbor list object. If None, then build the native neighbor list.
 
     Examples
     --------
     Compute potential energy
 
     >>> from ase import Atoms
-    >>> from deepmd.calculator import DP
+    >>> from deepmd.tf.calculator import DP
     >>> water = Atoms('H2O',
     >>>             positions=[(0.7601, 1.9270, 1),
     >>>                        (1.9575, 1, 1),
@@ -69,17 +72,24 @@ class DP(Calculator):
     """
 
     name = "DP"
-    implemented_properties = ["energy", "free_energy", "forces", "virial", "stress"]
+    implemented_properties: ClassVar[List[str]] = [
+        "energy",
+        "free_energy",
+        "forces",
+        "virial",
+        "stress",
+    ]
 
     def __init__(
         self,
         model: Union[str, "Path"],
         label: str = "DP",
-        type_dict: Dict[str, int] = None,
+        type_dict: Optional[Dict[str, int]] = None,
+        neighbor_list=None,
         **kwargs,
     ) -> None:
         Calculator.__init__(self, label=label, **kwargs)
-        self.dp = DeepPotential(str(Path(model).resolve()))
+        self.dp = DeepPot(str(Path(model).resolve()), neighbor_list=neighbor_list)
         if type_dict:
             self.type_dict = type_dict
         else:

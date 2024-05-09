@@ -13,6 +13,7 @@
 *.bz2
 *.pyc
 *.pb
+*.DS_Store
 tmp*
 CMakeCache.txt
 CMakeFiles
@@ -22,7 +23,7 @@ _skbuild
 deepmd_kit.egg-info/
 dist
 .eggs
-_version.py
+/deepmd/_version.py
 venv*
 .vscode/**
 _build

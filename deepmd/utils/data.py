@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import bisect
 import logging
 from typing import (
     List,
@@ -42,6 +43,9 @@ class DeepmdData:
             Data modifier that has the method `modify_data`
     trn_all_set
             Use all sets as training dataset. Otherwise, if the number of sets is more than 1, the last set is left for test.
+    sort_atoms : bool
+            Sort atoms by atom types. Required to enable when the data is directly feeded to
+            descriptors except mixed types.
     """
 
     def __init__(
@@ -53,6 +57,7 @@ class DeepmdData:
         optional_type_map: bool = True,
         modifier=None,
         trn_all_set: bool = False,
+        sort_atoms: bool = True,
     ):
         """Constructor."""
         root = DPPath(sys_path)
@@ -82,7 +87,7 @@ class DeepmdData:
         self.pbc = self._check_pbc(root)
         # enforce type_map if necessary
         self.enforce_type_map = False
-        if type_map is not None and self.type_map is not None:
+        if type_map is not None and self.type_map is not None and len(type_map):
             if not self.mixed_type:
                 atom_type_ = [
                     type_map.index(self.type_map[ii]) for ii in self.atom_type
@@ -102,6 +107,7 @@ class DeepmdData:
         if type_map is None and self.type_map is None and self.mixed_type:
             raise RuntimeError("mixed_type format must have type_map!")
         # make idx map
+        self.sort_atoms = sort_atoms
         self.idx_map = self._make_idx_map(self.atom_type)
         # train dirs
         self.test_dir = self.dirs[-1]
@@ -124,6 +130,11 @@ class DeepmdData:
         self.shuffle_test = shuffle_test
         # set modifier
         self.modifier = modifier
+        # calculate prefix sum for get_item method
+        frames_list = [self._get_nframes(item) for item in self.dirs]
+        self.nframes = np.sum(frames_list)
+        # The prefix sum stores the range of indices contained in each directory, which is needed by get_item method
+        self.prefix_sum = np.cumsum(frames_list).tolist()
 
     def add(
         self,
@@ -136,6 +147,7 @@ class DeepmdData:
         repeat: int = 1,
         default: float = 0.0,
         dtype: Optional[np.dtype] = None,
+        output_natoms_for_type_sel: bool = False,
     ):
         """Add a data item that to be loaded.
 
@@ -162,6 +174,8 @@ class DeepmdData:
             default value of data
         dtype : np.dtype, optional
             the dtype of data, overwrites `high_prec` if provided
+        output_natoms_for_type_sel : bool, optional
+            if True and type_sel is True, the atomic dimension will be natoms instead of nsel
         """
         self.data_dict[key] = {
             "ndof": ndof,
@@ -173,6 +187,7 @@ class DeepmdData:
             "reduce": None,
             "default": default,
             "dtype": dtype,
+            "output_natoms_for_type_sel": output_natoms_for_type_sel,
         }
         return self
 
@@ -244,6 +259,21 @@ class DeepmdData:
         else:
             return None
 
+    def get_item_torch(self, index: int) -> dict:
+        """Get a single frame data . The frame is picked from the data system by index. The index is coded across all the sets.
+
+        Parameters
+        ----------
+        index
+            index of the frame
+        """
+        i = bisect.bisect_right(self.prefix_sum, index)
+        frames = self._load_set(self.dirs[i])
+        frame = self._get_subdata(frames, index - self.prefix_sum[i])
+        frame = self.reformat_data_torch(frame)
+        frame["fid"] = index
+        return frame
+
     def get_batch(self, batch_size: int) -> dict:
         """Get a batch of data with `batch_size` frames. The frames are randomly picked from the data system.
 
@@ -260,8 +290,6 @@ class DeepmdData:
             self._load_batch_set(self.train_dirs[self.set_count % self.get_numb_set()])
             self.set_count += 1
             set_size = self.batch_set["coord"].shape[0]
-            if self.modifier is not None:
-                self.modifier.modify_data(self.batch_set, self)
         iterator_1 = self.iterator + batch_size
         if iterator_1 >= set_size:
             iterator_1 = set_size
@@ -356,7 +384,7 @@ class DeepmdData:
     def avg(self, key):
         """Return the average value of an item."""
         if key not in self.data_dict.keys():
-            raise RuntimeError("key %s has not been added" % key)
+            raise RuntimeError(f"key {key} has not been added")
         info = self.data_dict[key]
         ndof = info["ndof"]
         eners = []
@@ -405,6 +433,8 @@ class DeepmdData:
     def _load_batch_set(self, set_name: DPPath):
         if not hasattr(self, "batch_set") or self.get_numb_set() > 1:
             self.batch_set = self._load_set(set_name)
+            if self.modifier is not None:
+                self.modifier.modify_data(self.batch_set, self)
         self.batch_set, _ = self._shuffle_data(self.batch_set)
         self.reset_get_batch()
 
@@ -435,6 +465,39 @@ class DeepmdData:
                 ret[kk] = data[kk]
         return ret, idx
 
+    def _get_nframes(self, set_name: DPPath):
+        # get nframes
+        if not isinstance(set_name, DPPath):
+            set_name = DPPath(set_name)
+        path = set_name / "coord.npy"
+        if self.data_dict["coord"]["high_prec"]:
+            coord = path.load_numpy().astype(GLOBAL_ENER_FLOAT_PRECISION)
+        else:
+            coord = path.load_numpy().astype(GLOBAL_NP_FLOAT_PRECISION)
+        if coord.ndim == 1:
+            coord = coord.reshape([1, -1])
+        nframes = coord.shape[0]
+        return nframes
+
+    def reformat_data_torch(self, data):
+        """Modify the data format for the requirements of Torch backend.
+
+        Parameters
+        ----------
+        data
+            original data
+        """
+        for kk in self.data_dict.keys():
+            if "find_" in kk:
+                pass
+            else:
+                if kk in data and self.data_dict[kk]["atomic"]:
+                    data[kk] = data[kk].reshape(-1, self.data_dict[kk]["ndof"])
+        data["atype"] = data["type"]
+        if not self.pbc:
+            data["box"] = None
+        return data
+
     def _load_set(self, set_name: DPPath):
         # get nframes
         if not isinstance(set_name, DPPath):
@@ -464,6 +527,9 @@ class DeepmdData:
                     repeat=self.data_dict[kk]["repeat"],
                     default=self.data_dict[kk]["default"],
                     dtype=self.data_dict[kk]["dtype"],
+                    output_natoms_for_type_sel=self.data_dict[kk][
+                        "output_natoms_for_type_sel"
+                    ],
                 )
         for kk in self.data_dict.keys():
             if self.data_dict[kk]["reduce"] is not None:
@@ -483,9 +549,7 @@ class DeepmdData:
                     atom_type_mix_ = self.type_idx_map[atom_type_mix].astype(np.int32)
                 except IndexError as e:
                     raise IndexError(
-                        "some types in 'real_atom_types.npy' of set {} are not contained in {} types!".format(
-                            set_name, self.get_ntypes()
-                        )
+                        f"some types in 'real_atom_types.npy' of set {set_name} are not contained in {self.get_ntypes()} types!"
                     ) from e
                 atom_type_mix = atom_type_mix_
             real_type = atom_type_mix.reshape([nframes, self.natoms])
@@ -502,9 +566,7 @@ class DeepmdData:
             ).T
             assert (
                 atom_type_nums.sum(axis=-1) + ghost_nums.sum(axis=-1) == natoms
-            ).all(), "some types in 'real_atom_types.npy' of set {} are not contained in {} types!".format(
-                set_name, self.get_ntypes()
-            )
+            ).all(), f"some types in 'real_atom_types.npy' of set {set_name} are not contained in {self.get_ntypes()} types!"
             data["real_natoms_vec"] = np.concatenate(
                 (
                     np.tile(np.array([natoms, natoms], dtype=np.int32), (nframes, 1)),
@@ -515,6 +577,8 @@ class DeepmdData:
         else:
             data["type"] = np.tile(self.atom_type[self.idx_map], (nframes, 1))
 
+        # standardize keys
+        data = {kk.replace("atomic", "atom"): vv for kk, vv in data.items()}
         return data
 
     def _load_data(
@@ -530,19 +594,25 @@ class DeepmdData:
         type_sel=None,
         default: float = 0.0,
         dtype: Optional[np.dtype] = None,
+        output_natoms_for_type_sel: bool = False,
     ):
         if atomic:
             natoms = self.natoms
             idx_map = self.idx_map
             # if type_sel, then revise natoms and idx_map
             if type_sel is not None:
-                natoms = 0
+                natoms_sel = 0
                 for jj in type_sel:
-                    natoms += np.sum(self.atom_type == jj)
-                idx_map = self._idx_map_sel(self.atom_type, type_sel)
+                    natoms_sel += np.sum(self.atom_type == jj)
+                idx_map_sel = self._idx_map_sel(self.atom_type, type_sel)
+            else:
+                natoms_sel = natoms
+                idx_map_sel = idx_map
             ndof = ndof_ * natoms
         else:
             ndof = ndof_
+            natoms_sel = 0
+            idx_map_sel = None
         if dtype is not None:
             pass
         elif high_prec:
@@ -554,6 +624,39 @@ class DeepmdData:
             data = path.load_numpy().astype(dtype)
             try:  # YWolfeee: deal with data shape error
                 if atomic:
+                    if type_sel is not None:
+                        # check the data shape is nsel or natoms
+                        if data.size == nframes * natoms_sel * ndof_:
+                            if output_natoms_for_type_sel:
+                                tmp = np.zeros(
+                                    [nframes, natoms, ndof_], dtype=data.dtype
+                                )
+                                sel_mask = np.isin(self.atom_type, type_sel)
+                                tmp[:, sel_mask] = data.reshape(
+                                    [nframes, natoms_sel, ndof_]
+                                )
+                                data = tmp
+                            else:
+                                natoms = natoms_sel
+                                idx_map = idx_map_sel
+                                ndof = ndof_ * natoms
+                        elif data.size == nframes * natoms * ndof_:
+                            if output_natoms_for_type_sel:
+                                pass
+                            else:
+                                sel_mask = np.isin(self.atom_type, type_sel)
+                                data = data.reshape([nframes, natoms, ndof_])
+                                data = data[:, sel_mask]
+                                natoms = natoms_sel
+                                idx_map = idx_map_sel
+                                ndof = ndof_ * natoms
+                        else:
+                            raise ValueError(
+                                f"The shape of the data {key} in {set_name}"
+                                f"is {data.shape}, which doesn't match either"
+                                f"({nframes}, {natoms_sel}, {ndof_}) or"
+                                f"({nframes}, {natoms}, {ndof_})"
+                            )
                     data = data.reshape([nframes, natoms, -1])
                     data = data[:, idx_map, :]
                     data = data.reshape([nframes, -1])
@@ -562,20 +665,22 @@ class DeepmdData:
                 explanation = "This error may occur when your label mismatch it's name, i.e. you might store global tensor in `atomic_tensor.npy` or atomic tensor in `tensor.npy`."
                 log.error(str(err_message))
                 log.error(explanation)
-                raise ValueError(str(err_message) + ". " + explanation)
+                raise ValueError(str(err_message) + ". " + explanation) from err_message
             if repeat != 1:
                 data = np.repeat(data, repeat).reshape([nframes, -1])
             return np.float32(1.0), data
         elif must:
-            raise RuntimeError("%s not found!" % path)
+            raise RuntimeError(f"{path} not found!")
         else:
+            if atomic and type_sel is not None and not output_natoms_for_type_sel:
+                ndof = ndof_ * natoms_sel
             data = np.full([nframes, ndof], default, dtype=dtype)
             if repeat != 1:
                 data = np.repeat(data, repeat).reshape([nframes, -1])
             return np.float32(0.0), data
 
     def _load_type(self, sys_path: DPPath):
-        atom_type = (sys_path / "type.raw").load_txt(dtype=np.int32, ndmin=1)
+        atom_type = (sys_path / "type.raw").load_txt(ndmin=1).astype(np.int32)
         return atom_type
 
     def _load_type_mix(self, set_name: DPPath):
@@ -586,7 +691,10 @@ class DeepmdData:
     def _make_idx_map(self, atom_type):
         natoms = atom_type.shape[0]
         idx = np.arange(natoms)
-        idx_map = np.lexsort((idx, atom_type))
+        if self.sort_atoms:
+            idx_map = np.lexsort((idx, atom_type))
+        else:
+            idx_map = idx
         return idx_map
 
     def _load_type_map(self, sys_path: DPPath):
@@ -604,3 +712,78 @@ class DeepmdData:
 
     def _check_mode(self, set_path: DPPath):
         return (set_path / "real_atom_types.npy").is_file()
+
+
+class DataRequirementItem:
+    """A class to store the data requirement for data systems.
+
+    Parameters
+    ----------
+    key
+        The key of the item. The corresponding data is stored in `sys_path/set.*/key.npy`
+    ndof
+        The number of dof
+    atomic
+        The item is an atomic property.
+        If False, the size of the data should be nframes x ndof
+        If True, the size of data should be nframes x natoms x ndof
+    must
+        The data file `sys_path/set.*/key.npy` must exist.
+        If must is False and the data file does not exist, the `data_dict[find_key]` is set to 0.0
+    high_prec
+        Load the data and store in float64, otherwise in float32
+    type_sel
+        Select certain type of atoms
+    repeat
+        The data will be repeated `repeat` times.
+    default : float, default=0.
+        default value of data
+    dtype : np.dtype, optional
+        the dtype of data, overwrites `high_prec` if provided
+    output_natoms_for_type_sel : bool, optional
+        if True and type_sel is True, the atomic dimension will be natoms instead of nsel
+    """
+
+    def __init__(
+        self,
+        key: str,
+        ndof: int,
+        atomic: bool = False,
+        must: bool = False,
+        high_prec: bool = False,
+        type_sel: Optional[List[int]] = None,
+        repeat: int = 1,
+        default: float = 0.0,
+        dtype: Optional[np.dtype] = None,
+        output_natoms_for_type_sel: bool = False,
+    ) -> None:
+        self.key = key
+        self.ndof = ndof
+        self.atomic = atomic
+        self.must = must
+        self.high_prec = high_prec
+        self.type_sel = type_sel
+        self.repeat = repeat
+        self.default = default
+        self.dtype = dtype
+        self.output_natoms_for_type_sel = output_natoms_for_type_sel
+        self.dict = self.to_dict()
+
+    def to_dict(self) -> dict:
+        return {
+            "key": self.key,
+            "ndof": self.ndof,
+            "atomic": self.atomic,
+            "must": self.must,
+            "high_prec": self.high_prec,
+            "type_sel": self.type_sel,
+            "repeat": self.repeat,
+            "default": self.default,
+            "dtype": self.dtype,
+            "output_natoms_for_type_sel": self.output_natoms_for_type_sel,
+        }
+
+    def __getitem__(self, key: str):
+        if key not in self.dict:
+            raise KeyError(key)
+        return self.dict[key]

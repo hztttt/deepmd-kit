@@ -32,10 +32,13 @@ namespace deepmd_compat = deepmd::hpp;
 #include <iostream>
 #include <map>
 
+#include "comm_brick.h"
 #define FLOAT_PREC double
 
 namespace LAMMPS_NS {
-
+class CommBrickDeepMD : public CommBrick {
+  friend class PairDeepMD;
+};
 class PairDeepMD : public Pair {
  public:
   PairDeepMD(class LAMMPS *);
@@ -75,6 +78,8 @@ class PairDeepMD : public Pair {
   std::string get_file_content(const std::string &model);
   std::vector<std::string> get_file_content(
       const std::vector<std::string> &models);
+  std::vector<std::string> type_names;
+  double ener_unit_cvt_factor, dist_unit_cvt_factor, force_unit_cvt_factor;
 
  protected:
   virtual void allocate();
@@ -96,6 +101,7 @@ class PairDeepMD : public Pair {
   int out_each;
   int out_rel;
   int out_rel_v;
+  int stdf_comm_buff_size;
   bool single_model;
   bool multi_models_mod_devi;
   bool multi_models_no_mod_devi;
@@ -119,8 +125,11 @@ class PairDeepMD : public Pair {
   double eps_v;
 
   void make_fparam_from_compute(std::vector<double> &fparam);
-  bool do_compute;
-  std::string compute_id;
+  bool do_compute_fparam;
+  std::string compute_fparam_id;
+  void make_aparam_from_compute(std::vector<double> &aparam);
+  bool do_compute_aparam;
+  std::string compute_aparam_id;
 
   void make_ttm_fparam(std::vector<double> &fparam);
 
@@ -131,6 +140,8 @@ class PairDeepMD : public Pair {
   tagint *tagsend, *tagrecv;
   double *stdfsend, *stdfrecv;
   std::vector<int> type_idx_map;
+
+  CommBrickDeepMD *commdata_;
 };
 
 }  // namespace LAMMPS_NS
