@@ -85,7 +85,37 @@ class DeepPotBase {
       const std::vector<float>& box,
       const std::vector<float>& fparam = std::vector<float>(),
       const std::vector<float>& aparam = std::vector<float>()) = 0;
+  virtual void computew(
+      std::vector<double>& ener,
+      std::vector<double>& force,
+      std::vector<double>& force_mag,
+      std::vector<double>& virial,
+      std::vector<double>& atom_energy,
+      std::vector<double>& atom_virial,
+      const std::vector<double>& coord,
+      const std::vector<double>& spin,
+      const std::vector<int>& atype,
+      const std::vector<double>& box,
+      const std::vector<double>& fparam = std::vector<double>(),
+      const std::vector<double>& aparam = std::vector<double>()) = 0;
+  virtual void computew(
+      std::vector<double>& ener,
+      std::vector<float>& force,
+      std::vector<float>& force_mag,
+      std::vector<float>& virial,
+      std::vector<float>& atom_energy,
+      std::vector<float>& atom_virial,
+      const std::vector<float>& coord,
+      const std::vector<float>& spin,
+      const std::vector<int>& atype,
+      const std::vector<float>& box,
+      const std::vector<float>& fparam = std::vector<float>(),
+      const std::vector<float>& aparam = std::vector<float>()) = 0;
   /** @} */
+  /**
+   * @brief Evaluate the energy, force, virial, atomic energy, and atomic virial
+   *by using this DP.
+  ** @} */
   /**
    * @brief Evaluate the energy, force, virial, atomic energy, and atomic virial
    *by using this DP.
@@ -134,6 +164,38 @@ class DeepPotBase {
       std::vector<float>& atom_energy,
       std::vector<float>& atom_virial,
       const std::vector<float>& coord,
+      const std::vector<int>& atype,
+      const std::vector<float>& box,
+      const int nghost,
+      const InputNlist& inlist,
+      const int& ago,
+      const std::vector<float>& fparam = std::vector<float>(),
+      const std::vector<float>& aparam = std::vector<float>()) = 0;
+  virtual void computew(
+      std::vector<double>& ener,
+      std::vector<double>& force,
+      std::vector<double>& force_mag,
+      std::vector<double>& virial,
+      std::vector<double>& atom_energy,
+      std::vector<double>& atom_virial,
+      const std::vector<double>& coord,
+      const std::vector<double>& spin,
+      const std::vector<int>& atype,
+      const std::vector<double>& box,
+      const int nghost,
+      const InputNlist& inlist,
+      const int& ago,
+      const std::vector<double>& fparam = std::vector<double>(),
+      const std::vector<double>& aparam = std::vector<double>()) = 0;
+  virtual void computew(
+      std::vector<double>& ener,
+      std::vector<float>& force,
+      std::vector<float>& force_mag,
+      std::vector<float>& virial,
+      std::vector<float>& atom_energy,
+      std::vector<float>& atom_virial,
+      const std::vector<float>& coord,
+      const std::vector<float>& spin,
       const std::vector<int>& atype,
       const std::vector<float>& box,
       const int nghost,
@@ -307,6 +369,28 @@ class DeepPot {
                const std::vector<VALUETYPE>& box,
                const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
                const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(ENERGYTYPE& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
   /** @} */
   /**
    * @brief Evaluate the energy, force and virial by using this DP.
@@ -348,6 +432,34 @@ class DeepPot {
                std::vector<VALUETYPE>& force,
                std::vector<VALUETYPE>& virial,
                const std::vector<VALUETYPE>& coord,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& inlist,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(ENERGYTYPE& ener,
+	       std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& inlist,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
                const std::vector<int>& atype,
                const std::vector<VALUETYPE>& box,
                const int nghost,
@@ -397,6 +509,32 @@ class DeepPot {
                std::vector<VALUETYPE>& atom_energy,
                std::vector<VALUETYPE>& atom_virial,
                const std::vector<VALUETYPE>& coord,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(ENERGYTYPE& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               std::vector<VALUETYPE>& atom_energy,
+               std::vector<VALUETYPE>& atom_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               std::vector<VALUETYPE>& atom_energy,
+               std::vector<VALUETYPE>& atom_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
                const std::vector<int>& atype,
                const std::vector<VALUETYPE>& box,
                const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
@@ -450,6 +588,38 @@ class DeepPot {
                std::vector<VALUETYPE>& atom_energy,
                std::vector<VALUETYPE>& atom_virial,
                const std::vector<VALUETYPE>& coord,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& lmp_list,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(ENERGYTYPE& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               std::vector<VALUETYPE>& atom_energy,
+               std::vector<VALUETYPE>& atom_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& lmp_list,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& ener,
+               std::vector<VALUETYPE>& force,
+               std::vector<VALUETYPE>& force_mag,
+               std::vector<VALUETYPE>& virial,
+               std::vector<VALUETYPE>& atom_energy,
+               std::vector<VALUETYPE>& atom_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
                const std::vector<int>& atype,
                const std::vector<VALUETYPE>& box,
                const int nghost,
@@ -729,6 +899,20 @@ class DeepPotModelDevi {
                const int& ago,
                const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
                const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& all_ener,
+               std::vector<std::vector<VALUETYPE> >& all_force,
+               std::vector<std::vector<VALUETYPE> >& all_force_mag,
+               std::vector<std::vector<VALUETYPE> >& all_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& lmp_list,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
   /**
    * @brief Evaluate the energy, force, virial, atomic energy, and atomic virial
    *by using these DP models.
@@ -762,6 +946,22 @@ class DeepPotModelDevi {
                std::vector<std::vector<VALUETYPE> >& all_atom_energy,
                std::vector<std::vector<VALUETYPE> >& all_atom_virial,
                const std::vector<VALUETYPE>& coord,
+               const std::vector<int>& atype,
+               const std::vector<VALUETYPE>& box,
+               const int nghost,
+               const InputNlist& lmp_list,
+               const int& ago,
+               const std::vector<VALUETYPE>& fparam = std::vector<VALUETYPE>(),
+               const std::vector<VALUETYPE>& aparam = std::vector<VALUETYPE>());
+  template <typename VALUETYPE>
+  void compute(std::vector<ENERGYTYPE>& all_ener,
+               std::vector<std::vector<VALUETYPE> >& all_force,
+               std::vector<std::vector<VALUETYPE> >& all_force_mag,
+               std::vector<std::vector<VALUETYPE> >& all_virial,
+               std::vector<std::vector<VALUETYPE> >& all_atom_energy,
+               std::vector<std::vector<VALUETYPE> >& all_atom_virial,
+               const std::vector<VALUETYPE>& coord,
+               const std::vector<VALUETYPE>& spin,
                const std::vector<int>& atype,
                const std::vector<VALUETYPE>& box,
                const int nghost,

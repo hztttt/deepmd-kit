@@ -52,6 +52,7 @@ class PairDeepMD : public Pair {
   void unpack_reverse_comm(int, int *, double *) override;
   void print_summary(const std::string pre) const;
   int get_node_rank();
+  /*
   void extend(int &extend_inum,
               std::vector<int> &extend_ilist,
               std::vector<int> &extend_numneigh,
@@ -70,6 +71,7 @@ class PairDeepMD : public Pair {
               const int numb_types,
               const int numb_types_spin,
               const std::vector<double> &virtual_len);
+  */
   void cum_sum(std::map<int, int> &, std::map<int, int> &);
 
   std::string get_file_content(const std::string &model);
@@ -90,6 +92,7 @@ class PairDeepMD : public Pair {
   int numb_types;
   int numb_types_spin;
   std::vector<std::vector<double> > all_force;
+  std::vector<std::vector<double> > all_force_mag;
   std::ofstream fp;
   int out_freq;
   std::string out_file;

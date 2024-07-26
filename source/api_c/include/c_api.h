@@ -24,6 +24,9 @@ extern DP_Nlist* DP_NewNlist(int inum_,
                              int* ilist_,
                              int* numneigh_,
                              int** firstneigh_);
+// add
+extern DP_Nlist* DP_NewNlist_mapping(
+		int inum_, int* ilist_, int* numneigh_, int** firstneigh_, int* mapping);
 
 /**
  * @brief Delete a neighbor list.
@@ -348,6 +351,24 @@ extern void DP_DeepPotComputeNList2(DP_DeepPot* dp,
                                     double* atomic_energy,
                                     double* atomic_virial);
 
+extern void DP_DeepPotComputeNList2SP(DP_DeepPot* dp,
+                                    const int nframes,
+                                    const int natom,
+                                    const double* coord,
+                                    const double* spin,
+                                    const int* atype,
+                                    const double* cell,
+                                    const int nghost,
+                                    const DP_Nlist* nlist,
+                                    const int ago,
+                                    const double* fparam,
+                                    const double* aparam,
+                                    double* energy,
+                                    double* force,
+                                    double* force_mag,
+                                    double* virial,
+                                    double* atomic_energy,
+                                    double* atomic_virial);
 /**
  * @brief Evaluate the energy, force and virial by using a DP with the neighbor
  *list. (float version)
@@ -394,6 +415,24 @@ extern void DP_DeepPotComputeNListf2(DP_DeepPot* dp,
                                      float* atomic_energy,
                                      float* atomic_virial);
 
+extern void DP_DeepPotComputeNListf2SP(DP_DeepPot* dp,
+                                     const int nframes,
+                                     const int natom,
+                                     const float* coord,
+                                     const float* spin,
+                                     const int* atype,
+                                     const float* cell,
+                                     const int nghost,
+                                     const DP_Nlist* nlist,
+                                     const int ago,
+                                     const float* fparam,
+                                     const float* aparam,
+                                     double* energy,
+                                     float* force,
+                                     float* force_mag,
+                                     float* virial,
+                                     float* atomic_energy,
+                                     float* atomic_virial);
 /**
  * @brief Evaluate the energy, force and virial by using a DP with the mixed
  *type. (double version)
@@ -772,6 +811,24 @@ void DP_DeepPotModelDeviComputeNList2(DP_DeepPotModelDevi* dp,
                                       double* virial,
                                       double* atomic_energy,
                                       double* atomic_virial);
+void DP_DeepPotModelDeviComputeNList2SP(DP_DeepPotModelDevi* dp,
+                                      const int nframes,
+                                      const int natoms,
+                                      const double* coord,
+                                      const double* spin,
+                                      const int* atype,
+                                      const double* cell,
+                                      const int nghost,
+                                      const DP_Nlist* nlist,
+                                      const int ago,
+                                      const double* fparam,
+                                      const double* aparam,
+                                      double* energy,
+                                      double* force,
+                                      double* force_mag,
+                                      double* virial,
+                                      double* atomic_energy,
+                                      double* atomic_virial);
 /**
  * @brief Evaluate the energy, force and virial by using a DP model deviation
  *with neighbor list. (float version)
@@ -814,6 +871,24 @@ void DP_DeepPotModelDeviComputeNListf2(DP_DeepPotModelDevi* dp,
                                        const float* aparam,
                                        double* energy,
                                        float* force,
+                                       float* virial,
+                                       float* atomic_energy,
+                                       float* atomic_virial);
+void DP_DeepPotModelDeviComputeNListf2SP(DP_DeepPotModelDevi* dp,
+                                       const int nframes,
+                                       const int natoms,
+                                       const float* coord,
+                                       const float* spin,
+                                       const int* atype,
+                                       const float* cell,
+                                       const int nghost,
+                                       const DP_Nlist* nlist,
+                                       const int ago,
+                                       const float* fparam,
+                                       const float* aparam,
+                                       double* energy,
+                                       float* force,
+                                       float* force_mag,
                                        float* virial,
                                        float* atomic_energy,
                                        float* atomic_virial);
