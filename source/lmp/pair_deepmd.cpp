@@ -579,14 +579,16 @@ void PairDeepMD::compute(int eflag, int vflag) {
           }
         } else {
           try {
-            vector<double> deatom(nall * 1, 0);
-	    vector<double> dvatom(nall * 9, 0);
-            deep_pot.compute(dener, dforce, dforce_mag, dvirial, deatom, dvatom,
-                             dcoord, dspin, dtype, dbox, nghost, lmp_list, ago,
-                             fparam, daparam);
-            // deep_pot.compute(dener, dforce, dforce_mag, dvirial, dcoord, dspin,
-            //                  dtype, dbox, nghost, lmp_list, ago, fparam,
-            //                  daparam);
+            // vector<double> deatom(nall * 1, 0);
+	          // vector<double> dvatom(nall * 9, 0);
+            // deep_pot.compute(dener, dforce, dforce_mag, dvirial, deatom, dvatom,
+            //                  dcoord, dspin, dtype, dbox, nghost, lmp_list, ago,
+            //                  fparam, daparam);
+            const vector<double> & dcoord_const = dcoord;
+            const vector<double> & dspin_const = dspin;
+            deep_pot.compute(dener, dforce, dforce_mag, dvirial, dcoord_const, dspin_const,
+                             dtype, dbox, nghost, lmp_list, ago, fparam,
+                             daparam);
           } catch (deepmd_compat::deepmd_exception &e) {
             error->one(FLERR, e.what());
           }
