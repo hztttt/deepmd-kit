@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 from typing import (
+    List,
     Optional,
+    Tuple,
 )
 
 import numpy as np
@@ -139,7 +141,7 @@ class DescrptSeA(DescrptSe):
             Random seed for initializing the network parameters.
     type_one_side
             Try to build N_types embedding nets. Otherwise, building N_types^2 embedding nets
-    exclude_types : list[list[int]]
+    exclude_types : List[List[int]]
             The excluded pairs of types which have no interaction with each other.
             For example, `[[0, 1]]` means no interaction between type 0 and type 1.
     set_davg_zero
@@ -152,7 +154,7 @@ class DescrptSeA(DescrptSe):
             Only for the purpose of backward compatibility, retrieves the old behavior of using the random seed
     env_protection: float
             Protection parameter to prevent division by zero errors during environment matrix calculations.
-    type_map: list[str], Optional
+    type_map: List[str], Optional
             A list of strings. Give the name to each type of atoms.
 
     References
@@ -167,21 +169,21 @@ class DescrptSeA(DescrptSe):
         self,
         rcut: float,
         rcut_smth: float,
-        sel: list[int],
-        neuron: list[int] = [24, 48, 96],
+        sel: List[int],
+        neuron: List[int] = [24, 48, 96],
         axis_neuron: int = 8,
         resnet_dt: bool = False,
         trainable: bool = True,
         seed: Optional[int] = None,
         type_one_side: bool = True,
-        exclude_types: list[list[int]] = [],
+        exclude_types: List[List[int]] = [],
         set_davg_zero: bool = False,
         activation_function: str = "tanh",
         precision: str = "default",
         uniform_seed: bool = False,
         spin: Optional[Spin] = None,
         tebd_input_mode: str = "concat",
-        type_map: Optional[list[str]] = None,  # to be compat with input
+        type_map: Optional[List[str]] = None,  # to be compat with input
         env_protection: float = 0.0,  # not implement!!
         **kwargs,
     ) -> None:
@@ -325,7 +327,7 @@ class DescrptSeA(DescrptSe):
         """Returns the first dimension of the rotation matrix. The rotation is of shape dim_1 x 3."""
         return self.filter_neuron[-1]
 
-    def get_nlist(self) -> tuple[tf.Tensor, tf.Tensor, list[int], list[int]]:
+    def get_nlist(self) -> Tuple[tf.Tensor, tf.Tensor, List[int], List[int]]:
         """Returns neighbor information.
 
         Returns
@@ -645,6 +647,74 @@ class DescrptSeA(DescrptSe):
         atype = tf.reshape(atype_, [-1, natoms[1]])
         self.atype = atype
 
+        if self.spin is not None:
+            natoms_index = tf.concat([[0], tf.cumsum(natoms[2:])], axis=0)
+            diff_coord = []
+            for i in range(self.ntypes):
+                if i + self.ntypes_spin >= self.ntypes:
+                    diff_coord.append(
+                        tf.slice(
+                            coord,
+                            [0, natoms_index[i] * 3],
+                            [-1, natoms[2 + i] * 3],
+                        ) -                         
+                        tf.slice(
+                            coord,
+                            [0, natoms_index[i-len(self.spin.use_spin)] * 3],
+                            [-1, natoms[2 + i-len(self.spin.use_spin)] * 3],
+                        )
+                    )
+                else:
+                    diff_coord.append(
+                        tf.slice(
+                            coord,
+                            [0, natoms_index[i] * 3],
+                            [-1, natoms[2 + i] * 3],
+                        ) -                         
+                        tf.slice(
+                            coord,
+                            [0, natoms_index[i] * 3],
+                            [-1, natoms[2 + i] * 3],
+                        )
+                    )
+            self.diff_coord = tf.concat(diff_coord, axis=1)
+            '''
+            if not natoms[0] ==  natoms[1]:
+                aatype = atype[0, :]
+                ghost_atype = aatype[natoms[0] :]
+                _, _, ghost_natoms = tf.unique_with_counts(ghost_atype)
+                ghost_natoms_index = tf.concat([[0], tf.cumsum(ghost_natoms)], axis=0)
+                ghost_natoms_index += natoms[0]
+                for i in range(self.ntypes):
+                    if i + self.ntypes_spin >= self.ntypes:
+                        diff_coord.append(
+                            tf.slice(
+                                coord,
+                                [0, ghost_natoms_index[i] * 3],
+                                [-1, ghost_natoms[i] * 3],
+                            ) -                         
+                            tf.slice(
+                                coord,
+                                [0, ghost_natoms_index[i - len(self.spin.use_spin)] * 3],
+                                [-1, ghost_natoms[i - len(self.spin.use_spin)] * 3],
+                            )
+                        )
+                    else:
+                        diff_coord.append(
+                            tf.slice(
+                                coord,
+                                [0, ghost_natoms_index[i] * 3],
+                                [-1, ghost_natoms[i] * 3],
+                            ) -                         
+                            tf.slice(
+                                coord,
+                                [0, ghost_natoms_index[i] * 3],
+                                [-1, ghost_natoms[i] * 3],
+                            )
+                        )
+            self.diff_coord = tf.concat(diff_coord, axis=1)
+            '''
+
         op_descriptor = (
             build_op_descriptor() if nvnmd_cfg.enable else op_module.prod_env_mat_a
         )
@@ -665,6 +735,27 @@ class DescrptSeA(DescrptSe):
         nlist_t = tf.reshape(self.nlist + 1, [-1])
         atype_t = tf.concat([[self.ntypes], tf.reshape(self.atype, [-1])], axis=0)
         self.nei_type_vec = tf.nn.embedding_lookup(atype_t, nlist_t)
+
+
+        # nframes * nall * 3
+        diff_coord_reshape = tf.reshape(self.diff_coord, [-1, natoms[1], 3])
+        # nframes * nloc * nnei
+        nlist_reshaped = tf.reshape(self.nlist, [-1, natoms[0], self.nnei])
+        rj_gathered = tf.gather(diff_coord_reshape, nlist_reshaped, axis=1, batch_dims=1)
+        
+        idx_indices = tf.reshape(tf.range(natoms[0]), (1, natoms[0], 1))
+        idx_indices = tf.tile(idx_indices, [tf.shape(diff_coord_reshape)[0], 1, self.nnei])
+        ri_gathered = tf.gather(diff_coord_reshape, idx_indices, axis=1, batch_dims=1)
+        # nframes * nloc * nnei * 3
+        rij_reshaped = tf.reshape(self.rij, [-1, natoms[0], self.nnei, 3])
+        zero_mask = tf.reduce_all(tf.equal(rij_reshaped, 0.0), axis=-1, keepdims=True)
+
+        zero_mask = tf.broadcast_to(zero_mask, tf.shape(rj_gathered))
+        rj_gathered = tf.where(zero_mask, tf.zeros_like(rj_gathered), rj_gathered)
+        ri_gathered = tf.where(zero_mask, tf.zeros_like(ri_gathered), ri_gathered)
+
+        rij_update = rij_reshaped - rj_gathered + ri_gathered # double check 加法减法的问题.
+        self.rij = tf.reshape(rij_update, tf.shape(self.rij))
 
         # only used when tensorboard was set as true
         tf.summary.histogram("descrpt", self.descrpt)
@@ -694,7 +785,7 @@ class DescrptSeA(DescrptSe):
 
     def prod_force_virial(
         self, atom_ener: tf.Tensor, natoms: tf.Tensor
-    ) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         """Compute force and virial.
 
         Parameters
