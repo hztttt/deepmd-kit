@@ -396,6 +396,14 @@ class DeepPotTF : public DeepPotBase {
               const int numb_types_spin,
               const std::vector<VALUETYPE>& virtual_len,
               const std::vector<VALUETYPE>& spin_norm);
+
+  template <typename VALUETYPE>
+  void extend_nlist(std::vector<VALUETYPE>& extend_dcoord,
+		    std::vector<int>& extend_atype,
+		    const std::vector<VALUETYPE>& dcoord_,
+                    const std::vector<VALUETYPE>& dspin_,
+                    const std::vector<int>& datype_);
+
   void cum_sum(std::map<int, int>&, std::map<int, int>&);
 
  private:
