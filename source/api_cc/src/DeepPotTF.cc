@@ -706,7 +706,7 @@ void DeepPotTF::compute(ENERGYVTYPE& dener,
 
   std::vector<VALUETYPE> extend_dcoord;
   std::vector<int> extend_atype;
-  extend_nlist(extend_dcoord, extend_atype, dcoord_, dspin_, datype_)
+  extend_nlist(extend_dcoord, extend_atype, dcoord_, dspin_, datype_);
 
   atommap = deepmd::AtomMap(extend_atype.begin(), extend_atype.end());
 
@@ -1648,6 +1648,7 @@ template void DeepPotTF::extend<float>(
     const std::vector<float>& virtual_len,
     const std::vector<float>& spin_norm);
 
+template <typename VALUETYPE>
 void DeepPotTF::extend_nlist(std::vector<VALUETYPE>& extend_dcoord,
                         std::vector<int>& extend_atype,
                         const std::vector<VALUETYPE>& dcoord_,
