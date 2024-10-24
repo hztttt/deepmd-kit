@@ -1654,10 +1654,15 @@ void DeepPotTF::extend_nlist(std::vector<VALUETYPE>& extend_dcoord,
                         const std::vector<VALUETYPE>& dcoord_,
                         const std::vector<VALUETYPE>& dspin_,
                         const std::vector<int>& datype_) {
-  std::vector<VALUETYPE> virtual_len;
-  std::vector<VALUETYPE> spin_norm;
-  get_vector<VALUETYPE>(virtual_len, "spin_attr/virtual_len");
-  get_vector<VALUETYPE>(spin_norm, "spin_attr/spin_norm");
+  if (dtype == tensorflow::DT_DOUBLE) {
+    get_vector<double>(virtual_len, "spin_attr/virtual_len");
+    get_vector<double>(spin_norm, "spin_attr/spin_norm");
+  } else {
+    std::vector<float> virtual_len;
+    std::vector<float> spin_norm;
+    get_vector<float>(virtual_len, "spin_attr/virtual_len");
+    get_vector<float>(spin_norm, "spin_attr/spin_norm");
+  }
   // extend coord and atype
   int nloc = datype_.size();
   int nloc_spin = 0;
