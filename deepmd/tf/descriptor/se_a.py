@@ -648,72 +648,13 @@ class DescrptSeA(DescrptSe):
         self.atype = atype
 
         if self.spin is not None:
-            natoms_index = tf.concat([[0], tf.cumsum(natoms[2:])], axis=0)
-            diff_coord = []
-            for i in range(self.ntypes):
-                if i + self.ntypes_spin >= self.ntypes:
-                    diff_coord.append(
-                        tf.slice(
-                            coord,
-                            [0, natoms_index[i] * 3],
-                            [-1, natoms[2 + i] * 3],
-                        ) -                         
-                        tf.slice(
-                            coord,
-                            [0, natoms_index[i-len(self.spin.use_spin)] * 3],
-                            [-1, natoms[2 + i-len(self.spin.use_spin)] * 3],
-                        )
-                    )
-                else:
-                    diff_coord.append(
-                        tf.slice(
-                            coord,
-                            [0, natoms_index[i] * 3],
-                            [-1, natoms[2 + i] * 3],
-                        ) -                         
-                        tf.slice(
-                            coord,
-                            [0, natoms_index[i] * 3],
-                            [-1, natoms[2 + i] * 3],
-                        )
-                    )
-            self.diff_coord = tf.concat(diff_coord, axis=1)
-            '''
-            if not natoms[0] ==  natoms[1]:
-                aatype = atype[0, :]
-                ghost_atype = aatype[natoms[0] :]
-                _, _, ghost_natoms = tf.unique_with_counts(ghost_atype)
-                ghost_natoms_index = tf.concat([[0], tf.cumsum(ghost_natoms)], axis=0)
-                ghost_natoms_index += natoms[0]
-                for i in range(self.ntypes):
-                    if i + self.ntypes_spin >= self.ntypes:
-                        diff_coord.append(
-                            tf.slice(
-                                coord,
-                                [0, ghost_natoms_index[i] * 3],
-                                [-1, ghost_natoms[i] * 3],
-                            ) -                         
-                            tf.slice(
-                                coord,
-                                [0, ghost_natoms_index[i - len(self.spin.use_spin)] * 3],
-                                [-1, ghost_natoms[i - len(self.spin.use_spin)] * 3],
-                            )
-                        )
-                    else:
-                        diff_coord.append(
-                            tf.slice(
-                                coord,
-                                [0, ghost_natoms_index[i] * 3],
-                                [-1, ghost_natoms[i] * 3],
-                            ) -                         
-                            tf.slice(
-                                coord,
-                                [0, ghost_natoms_index[i] * 3],
-                                [-1, ghost_natoms[i] * 3],
-                            )
-                        )
-            self.diff_coord = tf.concat(diff_coord, axis=1)
-            '''
+            # split and concatenate force to compute local atom force and magnetic force
+            judge = tf.equal(natoms[0], natoms[1])
+            self.diff_coord = tf.cond(
+                judge,
+                lambda: self.natoms_match(coord, natoms),
+                lambda: self.natoms_not_match(coord, natoms, atype),
+            )
 
         op_descriptor = (
             build_op_descriptor() if nvnmd_cfg.enable else op_module.prod_env_mat_a
@@ -1563,3 +1504,76 @@ class DescrptSeA(DescrptSe):
             "type_map": self.type_map,
             "spin": self.spin,
         }
+
+    def natoms_match(self, coord, natoms):
+        natoms_index = tf.concat([[0], tf.cumsum(natoms[2:])], axis=0)
+        diff_coord_loc = []
+        for i in range(self.ntypes):
+            if i + self.ntypes_spin >= self.ntypes:
+                diff_coord_loc.append(
+                    tf.slice(
+                        coord,
+                        [0, natoms_index[i] * 3],
+                        [-1, natoms[2 + i] * 3],
+                    ) -
+                    tf.slice(
+                        coord,
+                        [0, natoms_index[i-len(self.spin.use_spin)] * 3],
+                        [-1, natoms[2 + i-len(self.spin.use_spin)] * 3],
+                    )
+                )
+            else:
+                diff_coord_loc.append(
+                    tf.slice(
+                        coord,
+                        [0, natoms_index[i] * 3],
+                        [-1, natoms[2 + i] * 3],
+                    ) -
+                    tf.slice(
+                        coord,
+                        [0, natoms_index[i] * 3],
+                        [-1, natoms[2 + i] * 3],
+                    )
+                )
+        diff_coord_loc = tf.concat(diff_coord_loc, axis=1)
+        return diff_coord_loc
+
+    def natoms_not_match(self, coord, natoms, atype):
+        diff_coord_loc = self.natoms_match(coord, natoms)
+        diff_coord_ghost = []
+        aatype = atype[0, :]
+        ghost_atype = aatype[natoms[0] :]
+        _, _, ghost_natoms = tf.unique_with_counts(ghost_atype)
+        ghost_natoms_index = tf.concat([[0], tf.cumsum(ghost_natoms)], axis=0)
+        ghost_natoms_index += natoms[0]
+        for i in range(self.ntypes):
+            if i + self.ntypes_spin >= self.ntypes:
+                diff_coord_ghost.append(
+                    tf.slice(
+                        coord,
+                        [0, ghost_natoms_index[i] * 3],
+                        [-1, ghost_natoms[i] * 3],
+                    ) -
+                    tf.slice(
+                        coord,
+                        [0, ghost_natoms_index[i - len(self.spin.use_spin)] * 3],
+                        [-1, ghost_natoms[i - len(self.spin.use_spin)] * 3],
+                    )
+                )
+            else:
+                diff_coord_ghost.append(
+                    tf.slice(
+                        coord,
+                        [0, ghost_natoms_index[i] * 3],
+                        [-1, ghost_natoms[i] * 3],
+                    ) -
+                    tf.slice(
+                        coord,
+                        [0, ghost_natoms_index[i] * 3],
+                        [-1, ghost_natoms[i] * 3],
+                    )
+                )
+        diff_coord_ghost = tf.concat(diff_coord_ghost, axis=1)
+        diff_coord = tf.concat([diff_coord_loc, diff_coord_ghost], axis=1)
+        return diff_coord
+
