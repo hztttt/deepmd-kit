@@ -648,7 +648,6 @@ class DescrptSeA(DescrptSe):
         self.atype = atype
 
         if self.spin is not None:
-            # split and concatenate force to compute local atom force and magnetic force
             judge = tf.equal(natoms[0], natoms[1])
             self.diff_coord = tf.cond(
                 judge,
@@ -677,26 +676,20 @@ class DescrptSeA(DescrptSe):
         atype_t = tf.concat([[self.ntypes], tf.reshape(self.atype, [-1])], axis=0)
         self.nei_type_vec = tf.nn.embedding_lookup(atype_t, nlist_t)
 
-
-        # nframes * nall * 3
-        diff_coord_reshape = tf.reshape(self.diff_coord, [-1, natoms[1], 3])
-        # nframes * nloc * nnei
-        nlist_reshaped = tf.reshape(self.nlist, [-1, natoms[0], self.nnei])
-        rj_gathered = tf.gather(diff_coord_reshape, nlist_reshaped, axis=1, batch_dims=1)
-        
-        idx_indices = tf.reshape(tf.range(natoms[0]), (1, natoms[0], 1))
-        idx_indices = tf.tile(idx_indices, [tf.shape(diff_coord_reshape)[0], 1, self.nnei])
-        ri_gathered = tf.gather(diff_coord_reshape, idx_indices, axis=1, batch_dims=1)
-        # nframes * nloc * nnei * 3
-        rij_reshaped = tf.reshape(self.rij, [-1, natoms[0], self.nnei, 3])
-        zero_mask = tf.reduce_all(tf.equal(rij_reshaped, 0.0), axis=-1, keepdims=True)
-
-        zero_mask = tf.broadcast_to(zero_mask, tf.shape(rj_gathered))
-        rj_gathered = tf.where(zero_mask, tf.zeros_like(rj_gathered), rj_gathered)
-        ri_gathered = tf.where(zero_mask, tf.zeros_like(ri_gathered), ri_gathered)
-
-        rij_update = rij_reshaped - rj_gathered + ri_gathered # double check 加法减法的问题.
-        self.rij = tf.reshape(rij_update, tf.shape(self.rij))
+        if self.spin is not None:
+            diff_coord_reshape = tf.reshape(self.diff_coord, [-1, natoms[1], 3])
+            nlist_reshaped = tf.reshape(self.nlist, [-1, natoms[0], self.nnei])
+            rj_gathered = tf.gather(diff_coord_reshape, nlist_reshaped, axis=1, batch_dims=1)
+            idx_indices = tf.reshape(tf.range(natoms[0]), (1, natoms[0], 1))
+            idx_indices = tf.tile(idx_indices, [tf.shape(diff_coord_reshape)[0], 1, self.nnei])
+            ri_gathered = tf.gather(diff_coord_reshape, idx_indices, axis=1, batch_dims=1)
+            rij_reshaped = tf.reshape(self.rij, [-1, natoms[0], self.nnei, 3])
+            zero_mask = tf.reduce_all(tf.equal(rij_reshaped, 0.0), axis=-1, keepdims=True)
+            zero_mask = tf.broadcast_to(zero_mask, tf.shape(rj_gathered))
+            rj_gathered = tf.where(zero_mask, tf.zeros_like(rj_gathered), rj_gathered)
+            ri_gathered = tf.where(zero_mask, tf.zeros_like(ri_gathered), ri_gathered)
+            rij_update = rij_reshaped - rj_gathered + ri_gathered
+            self.rij = tf.reshape(rij_update, tf.shape(self.rij))
 
         # only used when tensorboard was set as true
         tf.summary.histogram("descrpt", self.descrpt)
