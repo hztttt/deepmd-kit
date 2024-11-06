@@ -63,7 +63,7 @@ if not hasattr(torch.ops.deepmd, "border_op"):
             "See documentation for DPA-2 for details."
         )
 
-    # Note: this hack cannot actually save a model that can be runned using LAMMPS.
+    # Note: this hack cannot actually save a model that can be run using LAMMPS.
     torch.ops.deepmd.border_op = border_op
 
 
@@ -196,8 +196,8 @@ class DescrptBlockRepformers(DescriptorBlock):
             Random seed for parameter initialization.
         """
         super().__init__()
-        self.rcut = rcut
-        self.rcut_smth = rcut_smth
+        self.rcut = float(rcut)
+        self.rcut_smth = float(rcut_smth)
         self.ntypes = ntypes
         self.nlayers = nlayers
         sel = [sel] if isinstance(sel, int) else sel
@@ -345,11 +345,11 @@ class DescrptBlockRepformers(DescriptorBlock):
             raise KeyError(key)
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -487,8 +487,16 @@ class DescrptBlockRepformers(DescriptorBlock):
                     comm_dict["recv_num"],
                     g1,
                     comm_dict["communicator"],
-                    torch.tensor(real_nloc),  # pylint: disable=no-explicit-dtype,no-explicit-device
-                    torch.tensor(real_nall - real_nloc),  # pylint: disable=no-explicit-dtype,no-explicit-device
+                    torch.tensor(
+                        real_nloc,
+                        dtype=torch.int32,
+                        device=env.DEVICE,
+                    ),  # should be int of c++
+                    torch.tensor(
+                        real_nall - real_nloc,
+                        dtype=torch.int32,
+                        device=env.DEVICE,
+                    ),  # should be int of c++
                 )
                 g1_ext = ret[0].unsqueeze(0)
                 if has_spin:
@@ -556,8 +564,12 @@ class DescrptBlockRepformers(DescriptorBlock):
         self.stats = env_mat_stat.stats
         mean, stddev = env_mat_stat()
         if not self.set_davg_zero:
-            self.mean.copy_(torch.tensor(mean, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
-        self.stddev.copy_(torch.tensor(stddev, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
+            self.mean.copy_(
+                torch.tensor(mean, device=env.DEVICE, dtype=self.mean.dtype)
+            )
+        self.stddev.copy_(
+            torch.tensor(stddev, device=env.DEVICE, dtype=self.stddev.dtype)
+        )
 
     def get_stats(self) -> dict[str, StatItem]:
         """Get the statistics of the descriptor."""
