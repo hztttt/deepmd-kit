@@ -11,9 +11,9 @@ keeping other sections the same as the normal energy model's input script.
 Note that when adding spin into the model, there will be some implicit modifications automatically done by the program:
 
 - In the TensorFlow backend, the `se_e2_a` descriptor will treat those atom types with spin as new (virtual) types,
-  and duplicate their corresponding selected numbers of neighbors ({ref}`sel <model/descriptor[se_e2_a]/sel>`) from their real atom types.
+  and duplicate their corresponding selected numbers of neighbors ({ref}`sel <model[standard]/descriptor[se_e2_a]/sel>`) from their real atom types.
 - In the PyTorch backend, if spin settings are added, all the types (with or without spin) will have their virtual types.
-  The `se_e2_a` descriptor will thus double the {ref}`sel <model/descriptor[se_e2_a]/sel>` list,
+  The `se_e2_a` descriptor will thus double the {ref}`sel <model[standard]/descriptor[se_e2_a]/sel>` list,
   while in other descriptors with mixed types (such as `dpa1` or `dpa2`), the sel number will not be changed for clarity.
   If you are using descriptors with mixed types, to achieve better performance,
   you should manually extend your sel number (maybe double) depending on the balance between performance and efficiency.
@@ -71,6 +71,14 @@ See `se_e2_a` examples in `$deepmd_source_dir/examples/spin/se_e2_a/input_torch.
   List of float values with shape of `ntypes` or `ntypes_spin` or one single float value for all types,
   only used when {ref}`use_spin <model/spin[ener_spin]/use_spin>` is True for each atom type.
 
+:::{note}
+It should be noted that the spin models in PyTorch/DP are capable of addressing scenarios where the spin approaches zero
+(indicating the virtual atom is in close proximity to the real atom) by adjusting the non-zero
+{ref}`env_protection <model[standard]/descriptor[se_e2_a]/env_protection>` parameter within the descriptor.
+This parameter is set to 0.01 by default in the spin model. It appears that a value of 0.01 is generally sufficient for maintaining model stability.
+For systems with nearly zero spin, users can also consider tuning this parameter to potentially enhance stability.
+:::
+
 ## Spin Loss
 
 The spin loss function $L$ for training energy is given by
@@ -78,6 +86,10 @@ The spin loss function $L$ for training energy is given by
 $$L = p_e L_e + p_{fr} L_{fr} + p_{fm} L_{fm} + p_v L_v$$
 
 where $L_e$, $L_{fr}$, $L_{fm}$ and $L_v$ denote the loss in energy, atomic force, magnatic force and virial, respectively. $p_e$, $p_{fr}$, $p_{fm}$ and $p_v$ give the prefactors of the energy, atomic force, magnatic force and virial losses.
+
+:::{note}
+Please note that the virial and atomic virial are not currently supported in spin models.
+:::
 
 The prefectors may not be a constant, rather it changes linearly with the learning rate. Taking the atomic force prefactor for example, at training step $t$, it is given by
 
@@ -145,7 +157,7 @@ We list the details about spin system data format in TensorFlow backend:
 
 ### Spin data format in PyTorch/DP
 
-In the PyTorch backend, spin and magnetic forces are listed in seperate files, and the data format may contain the following files:
+In the PyTorch backend, spin and magnetic forces are listed in separate files, and the data format may contain the following files:
 
 ```
 type.raw

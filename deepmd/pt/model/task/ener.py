@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 import logging
 from typing import (
     Optional,
@@ -57,7 +56,7 @@ class EnergyFittingNet(InvarFitting):
         seed: Optional[Union[int, list[int]]] = None,
         type_map: Optional[list[str]] = None,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(
             "energy",
             ntypes,
@@ -78,7 +77,7 @@ class EnergyFittingNet(InvarFitting):
 
     @classmethod
     def deserialize(cls, data: dict) -> "GeneralFitting":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         data.pop("var_name")
         data.pop("dim_out")
@@ -110,14 +109,14 @@ class EnergyFittingNetDirect(Fitting):
         use_tebd=True,
         return_energy=False,
         **kwargs,
-    ):
+    ) -> None:
         """Construct a fitting net for energy.
 
         Args:
         - ntypes: Element count.
         - embedding_width: Embedding width per atom.
         - neuron: Number of neurons in each hidden layers of the fitting net.
-        - bias_atom_e: Average enery per atom for each element.
+        - bias_atom_e: Average energy per atom for each element.
         - resnet_dt: Using time-step in the ResNet construction.
         """
         super().__init__()
@@ -126,10 +125,13 @@ class EnergyFittingNetDirect(Fitting):
         self.use_tebd = use_tebd
         self.out_dim = out_dim
         if bias_atom_e is None:
-            bias_atom_e = np.zeros([self.ntypes])  # pylint: disable=no-explicit-dtype
+            # place holder, dtype does not matter
+            bias_atom_e = np.zeros([self.ntypes], dtype=np.float64)
         if not use_tebd:
             assert self.ntypes == len(bias_atom_e), "Element count mismatches!"
-        bias_atom_e = torch.tensor(bias_atom_e, device=env.DEVICE)  # pylint: disable=no-explicit-dtype
+        bias_atom_e = torch.tensor(
+            bias_atom_e, device=env.DEVICE, dtype=env.GLOBAL_PT_FLOAT_PRECISION
+        )
         self.register_buffer("bias_atom_e", bias_atom_e)
 
         filter_layers_dipole = []

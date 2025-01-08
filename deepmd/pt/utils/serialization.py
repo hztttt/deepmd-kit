@@ -12,6 +12,9 @@ from deepmd.pt.model.model.model import (
 from deepmd.pt.train.wrapper import (
     ModelWrapper,
 )
+from deepmd.pt.utils import (
+    env,
+)
 
 
 def serialize_from_file(model_file: str) -> dict:
@@ -33,7 +36,7 @@ def serialize_from_file(model_file: str) -> dict:
         model = get_model(model_def_script)
         model.load_state_dict(saved_model.state_dict())
     elif model_file.endswith(".pt"):
-        state_dict = torch.load(model_file, map_location="cpu")
+        state_dict = torch.load(model_file, map_location="cpu", weights_only=True)
         if "model" in state_dict:
             state_dict = state_dict["model"]
         model_def_script = state_dict["_extra_state"]["model_params"]
@@ -73,6 +76,10 @@ def deserialize_to_file(model_file: str, data: dict) -> None:
     # JIT will happy in this way...
     model.model_def_script = json.dumps(data["model_def_script"])
     if "min_nbor_dist" in data.get("@variables", {}):
-        model.min_nbor_dist = float(data["@variables"]["min_nbor_dist"])
+        model.min_nbor_dist = torch.tensor(
+            float(data["@variables"]["min_nbor_dist"]),
+            dtype=env.GLOBAL_PT_FLOAT_PRECISION,
+            device=env.DEVICE,
+        )
     model = torch.jit.script(model)
     torch.jit.save(model, model_file)

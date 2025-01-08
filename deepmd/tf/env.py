@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Module that sets tensorflow working environment and exports inportant constants."""
+"""Module that sets tensorflow working environment and exports important constants."""
 
 import ctypes
 import logging
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     )
 
 
-def dlopen_library(module: str, filename: str):
+def dlopen_library(module: str, filename: str) -> None:
     """Dlopen a library from a module.
 
     Parameters
@@ -84,7 +84,7 @@ FILTER_MSGS = [
 
 
 class TFWarningFilter(logging.Filter):
-    def filter(self, record):
+    def filter(self, record) -> bool:
         return not any(msg in record.getMessage().strip() for msg in FILTER_MSGS)
 
 
@@ -92,7 +92,7 @@ class TFWarningFilter(logging.Filter):
 # https://keras.io/getting_started/#tensorflow--keras-2-backwards-compatibility
 # 2024/04/24: deepmd.tf doesn't import tf.keras any more
 
-# import tensorflow v1 compatability
+# import tensorflow v1 compatibility
 import tensorflow.compat.v1 as tf
 
 tf.get_logger().addFilter(TFWarningFilter())
@@ -221,7 +221,7 @@ TRANSFER_PATTERN = (
 )
 
 
-def set_mkl():
+def set_mkl() -> None:
     """Tuning MKL for the best performance.
 
     References
@@ -293,7 +293,7 @@ def get_tf_session_config() -> Any:
 default_tf_session_config = get_tf_session_config()
 
 
-def reset_default_tf_session_config(cpu_only: bool):
+def reset_default_tf_session_config(cpu_only: bool) -> None:
     """Limit tensorflow session to CPU or not.
 
     Parameters
@@ -339,7 +339,7 @@ def get_module(module_name: str) -> "ModuleType":
         try:
             module = tf.load_op_library(str(module_file))
         except tf.errors.NotFoundError as e:
-            # check CXX11_ABI_FLAG is compatiblity
+            # check CXX11_ABI_FLAG is compatibility
             # see https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
             # ABI should be the same
             if "CXX11_ABI_FLAG" in tf.__dict__:
@@ -377,7 +377,7 @@ def get_module(module_name: str) -> "ModuleType":
                     "instead."
                 ) from e
             error_message = (
-                "This deepmd-kit package is inconsitent with TensorFlow "
+                "This deepmd-kit package is inconsistent with TensorFlow "
                 f"Runtime, thus an error is raised when loading {module_name}. "
                 "You need to rebuild deepmd-kit against this TensorFlow "
                 "runtime."

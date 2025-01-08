@@ -50,7 +50,7 @@ class MapTable:
     :math:`h_{ji} = \frac{s(r_{ji})}{r_{ji}}`, and
     :math:`\mathcal{G}_{ji}` is embedding matrix.
 
-    The mapping funciton can be define as:
+    The mapping function can be define as:
 
     | :math:`y = f(x) = y_{k} + (x - x_{k}) * dy_{k}`
     | :math:`y_{k} = f(x_{k})`
@@ -77,7 +77,7 @@ class MapTable:
     DOI: 10.1038/s41524-022-00773-z
     """
 
-    def __init__(self, config_file: str, weight_file: str, map_file: str):
+    def __init__(self, config_file: str, weight_file: str, map_file: str) -> None:
         self.config_file = config_file
         self.weight_file = weight_file
         self.map_file = map_file
@@ -250,7 +250,7 @@ class MapTable:
             dic_val[key] = dats
         return dic_val
 
-    def plot_lines(self, x, dic1, dic2=None):
+    def plot_lines(self, x, dic1, dic2=None) -> None:
         r"""Plot lines to see accuracy."""
         pass
 
@@ -436,7 +436,7 @@ class MapTable:
         # N = NUM_MAPT
         N = 512
         N2 = int(rc_max**2)
-        # N+1 ranther than N for calculating defference
+        # N+1 ranther than N for calculating difference
         keys = list(dic_ph.keys())
         vals = list(dic_ph.values())
 
@@ -446,7 +446,7 @@ class MapTable:
 
         u2 = N2 * np.reshape(np.arange(0, N * 16 + 1) / (N * 16), [-1, 1])  # pylint: disable=no-explicit-dtype
         res_lst2 = run_sess(sess, vals, feed_dict={dic_ph["u"]: u2})
-        res_dic2 = dict(zip(keys, res_lst2))  # reference for commpare
+        res_dic2 = dict(zip(keys, res_lst2))  # reference for compare
 
         # change value
         for tt in range(ndim):
@@ -653,7 +653,7 @@ def mapt(
     nvnmd_weight: Optional[str] = "nvnmd/weight.npy",
     nvnmd_map: Optional[str] = "nvnmd/map.npy",
     **kwargs,
-):
+) -> None:
     # build mapping table
     mapObj = MapTable(nvnmd_config, nvnmd_weight, nvnmd_map)
     mapObj.build_map()

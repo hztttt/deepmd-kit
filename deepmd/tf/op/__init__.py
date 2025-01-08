@@ -13,12 +13,12 @@ PACKAGE_BASE = "deepmd.tf.op"
 log = logging.getLogger(__name__)
 
 
-def import_ops():
+def import_ops() -> None:
     """Import all custom TF ops that are present in this submodule.
 
     Notes
     -----
-    Initialy this subdir is unpopulated. CMake will install all the op module python
+    Initially this subdir is unpopulated. CMake will install all the op module python
     files and shared libs.
     """
     for module_file in Path(__file__).parent.glob("*.py"):

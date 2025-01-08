@@ -32,14 +32,14 @@ class DenoiseNet(Fitting):
         prefactor=[0.5, 0.5],
         activation_function="gelu",
         **kwargs,
-    ):
+    ) -> None:
         """Construct a denoise net.
 
         Args:
         - ntypes: Element count.
         - embedding_width: Embedding width per atom.
         - neuron: Number of neurons in each hidden layers of the fitting net.
-        - bias_atom_e: Average enery per atom for each element.
+        - bias_atom_e: Average energy per atom for each element.
         - resnet_dt: Using time-step in the ResNet construction.
         """
         super().__init__()

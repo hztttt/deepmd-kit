@@ -36,7 +36,7 @@ The elements in the training dataset must be contained in the pre-trained datase
 
 The finetune procedure will inherit the model structures in `pretrained.pb`,
 and thus it will ignore the model parameters in `input.json`,
-such as {ref}`descriptor <model/descriptor>`, {ref}`fitting_net <model/fitting_net>`,
+such as {ref}`descriptor <model[standard]/descriptor>`, {ref}`fitting_net <model[standard]/fitting_net>`,
 {ref}`type_embedding <model/type_embedding>` and {ref}`type_map <model/type_map>`.
 However, you can still set the `trainable` parameters in each part of `input.json` to control the training procedure.
 
@@ -94,7 +94,7 @@ The model section will be overwritten (except the `type_map` subsection) by that
 
 #### Fine-tuning from a multi-task pre-trained model
 
-Additionally, within the PyTorch implementation and leveraging the flexibility offered by the framework and the multi-task training process proposed in DPA2 [paper](https://arxiv.org/abs/2312.15492),
+Additionally, within the PyTorch implementation and leveraging the flexibility offered by the framework and the multi-task training process proposed in DPA2 [paper](https://doi.org/10.1038/s41524-024-01493-2),
 we also support more general multitask pre-trained models, which includes multiple datasets for pre-training. These pre-training datasets share a common descriptor while maintaining their individual fitting nets,
 as detailed in the paper above.
 
@@ -106,7 +106,7 @@ $ dp --pt train input.json --finetune multitask_pretrained.pt --model-branch CHO
 ```
 
 :::{note}
-One can check the available model branches in multi-task pre-trained model by refering to the documentation of the pre-trained model or by using the following command:
+One can check the available model branches in multi-task pre-trained model by referring to the documentation of the pre-trained model or by using the following command:
 
 ```bash
 $ dp --pt show multitask_pretrained.pt model-branch
@@ -129,7 +129,7 @@ Then, prepare a suitable input script for multitask fine-tuning `multi_input.jso
 
 - Suppose the new dataset for fine-tuning is named `DOWNSTREAM_DATA`, and the datasets to be retained from multitask pre-trained model are `PRE_DATA1` and `PRE_DATA2`. One can:
 
-1. Refer to the [`multi-task-training`](./multi-task-training-pt.md) document to prepare a multitask training script for two systems,
+1. Refer to the [`multi-task-training`](./multi-task-training) document to prepare a multitask training script for two systems,
    ideally extracting parts (i.e. {ref}`model_dict <model/model_dict>`, {ref}`loss_dict <loss_dict>`, {ref}`data_dict <training/data_dict>` and {ref}`model_prob <training/model_prob>` parts) corresponding to `PRE_DATA1` and `PRE_DATA2` directly from the training script of the pre-trained model.
 2. For `DOWNSTREAM_DATA`, select a desired branch to fine-tune from (e.g., `PRE_DATA1`), copy the configurations of `PRE_DATA1` as the configuration for `DOWNSTREAM_DATA` and insert the corresponding data path into the {ref}`data_dict <training/data_dict>`,
    thereby generating a three-system multitask training script.

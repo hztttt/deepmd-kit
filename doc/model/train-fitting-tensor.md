@@ -1,7 +1,7 @@
-# Fit `tensor` like `Dipole` and `Polarizability` {{ tensorflow_icon }} {{ pytorch_icon }} {{ dpmodel_icon }}
+# Fit `tensor` like `Dipole` and `Polarizability` {{ tensorflow_icon }} {{ pytorch_icon }} {{ jax_icon }} {{ dpmodel_icon }}
 
 :::{note}
-**Supported backends**: TensorFlow {{ tensorflow_icon }} {{ pytorch_icon }} {{ dpmodel_icon }}
+**Supported backends**: TensorFlow {{ tensorflow_icon }}, PyTorch {{ pytorch_icon }}, JAX {{ jax_icon }}, DP {{ dpmodel_icon }}
 :::
 
 Unlike `energy`, which is a scalar, one may want to fit some high dimensional physical quantity, like `dipole` (vector) and `polarizability` (matrix, shorted as `polar`). Deep Potential has provided different APIs to do this. In this example, we will show you how to train a model to fit a water system. A complete training input script of the examples can be found in
@@ -30,7 +30,8 @@ $deepmd_source_dir/examples/water_tensor/polar/polar_input_torch.json
 
 The training and validation data are also provided our examples. But note that **the data provided along with the examples are of limited amount, and should not be used to train a production model.**
 
-Similar to the `input.json` used in `ener` mode, training JSON is also divided into {ref}`model <model>`, {ref}`learning_rate <learning_rate>`, {ref}`loss <loss>` and {ref}`training <training>`. Most keywords remain the same as `ener` mode, and their meaning can be found [here](train-se-e2-a.md). To fit a tensor, one needs to modify {ref}`model/fitting_net <model/fitting_net>` and {ref}`loss <loss>`.
+Similar to the `input.json` used in `ener` mode, training JSON is also divided into {ref}`model <model>`, {ref}`learning_rate <learning_rate>`, {ref}`loss <loss>` and {ref}`training <training>`. Most keywords remain the same as `ener` mode, and their meaning can be found [here](train-se-e2-a.md).
+To fit a tensor, one needs to modify {ref}`fitting_net <model[standard]/fitting_net>` and {ref}`loss <loss>`.
 
 ## Theory
 
@@ -72,7 +73,7 @@ The tensorial models can be used to calculate IR spectrum and Raman spectrum.[^1
 
 ## The fitting Network
 
-The {ref}`fitting_net <model/fitting_net>` section tells DP which fitting net to use.
+The {ref}`fitting_net <model[standard]/fitting_net>` section tells DP which fitting net to use.
 
 ::::{tab-set}
 
@@ -241,3 +242,9 @@ One may notice that in each step, some of the local loss and global loss will be
 ```
 
 During training, at each step when the `lcurve.out` is printed, the system used for evaluating the training (validation) error may be either with only global or only atomic labels, thus the corresponding atomic or global errors are missing and are printed as zeros.
+
+## Difference among different backends
+
+To only fit against a subset of atomic types, in the TensorFlow backend, {ref}`fitting_net/sel_type <model[standard]/fitting_net[dipole]/sel_type>` should be set to selected types;
+in other backends, {ref}`atom_exclude_types <model/atom_exclude_types>` should be set to excluded types.
+The TensorFlow backend does not support {ref}`numb_fparam <model[standard]/fitting_net[dipole]/numb_fparam>` and {ref}`numb_aparam <model[standard]/fitting_net[dipole]/numb_aparam>`.

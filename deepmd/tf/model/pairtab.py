@@ -68,7 +68,7 @@ class PairTabModel(Model):
 
     def __init__(
         self, tab_file: str, rcut: float, sel: Union[int, list[int]], **kwargs
-    ):
+    ) -> None:
         super().__init__()
         self.tab_file = tab_file
         self.tab = PairTab(self.tab_file, rcut=rcut)
@@ -244,7 +244,7 @@ class PairTabModel(Model):
 
     def get_loss(self, loss: dict, lr) -> Optional[Union[Loss, dict]]:
         """Get the loss function(s)."""
-        # nothing nees to do
+        # nothing needs to do
         return
 
     def get_rcut(self) -> float:
@@ -255,7 +255,7 @@ class PairTabModel(Model):
         """Get the number of types."""
         return self.ntypes
 
-    def data_stat(self, data: dict):
+    def data_stat(self, data: dict) -> None:
         """Data staticis."""
         # nothing needs to do
 
@@ -285,7 +285,7 @@ class PairTabModel(Model):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict

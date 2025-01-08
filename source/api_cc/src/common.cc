@@ -241,6 +241,9 @@ void deepmd::NeighborListData::copy_from_nlist(const InputNlist& inlist) {
     int jnum = inlist.numneigh[ii];
     jlist[ii].resize(jnum);
     memcpy(&jlist[ii][0], inlist.firstneigh[ii], jnum * sizeof(int));
+    for (int jj = 0; jj < jnum; ++jj) {
+      jlist[ii][jj] &= inlist.mask;
+    }
   }
 }
 
@@ -386,7 +389,13 @@ static inline void _load_library_path(std::string dso_path) {
   if (!dso_handle) {
     throw deepmd::deepmd_exception(
         dso_path +
-        " is not found! You can add the library directory to LD_LIBRARY_PATH");
+        " is not found or fails to load! You can add the library directory to "
+        "LD_LIBRARY_PATH."
+#ifndef _WIN32
+        " Error message: " +
+        std::string(dlerror())
+#endif
+    );
   }
 }
 
@@ -934,7 +943,7 @@ void deepmd::select_map(std::vector<VT>& out,
         for (int ii = 0; ii < in.size() / stride / nframes; ++ii) {
 #ifdef DEBUG
       assert(ii < idx_map.size() && "idx goes over the idx map size");
-      assert(idx_map[ii] < out.size() && "mappped idx goes over the out size");
+      assert(idx_map[ii] < out.size() && "mapped idx goes over the out size");
 #endif
       if (idx_map[ii] >= 0) {
         int to_ii = idx_map[ii];
@@ -1395,4 +1404,16 @@ void deepmd::print_summary(const std::string& pre) {
   std::cout << pre
             << "set tf inter_op_parallelism_threads: " << num_inter_nthreads
             << std::endl;
+}
+
+deepmd::DPBackend deepmd::get_backend(const std::string& model) {
+  if (model.length() >= 4 && model.substr(model.length() - 4) == ".pth") {
+    return deepmd::DPBackend::PyTorch;
+  } else if (model.length() >= 3 && model.substr(model.length() - 3) == ".pb") {
+    return deepmd::DPBackend::TensorFlow;
+  } else if (model.length() >= 11 &&
+             model.substr(model.length() - 11) == ".savedmodel") {
+    return deepmd::DPBackend::JAX;
+  }
+  throw deepmd::deepmd_exception("Unsupported model file format");
 }

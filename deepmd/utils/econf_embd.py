@@ -237,7 +237,7 @@ def make_econf_embedding(
 
 
 def transform_to_spin_rep(res: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Tranform electron occupation of 0/1/2 to -1,-1/-1,1/1,1."""
+    """Transform electron occupation of 0/1/2 to -1,-1/-1,1/1,1."""
     ret = {}
 
     def transform(ii):
@@ -257,7 +257,7 @@ def transform_to_spin_rep(res: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     return ret
 
 
-def print_econf_embedding(res: dict[str, np.ndarray]):
+def print_econf_embedding(res: dict[str, np.ndarray]) -> None:
     """Print electron configuration embedding."""
     for kk, vv in res.items():
         vvstr = ",".join([str(ii) for ii in vv])

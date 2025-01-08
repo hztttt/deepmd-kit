@@ -35,7 +35,7 @@ class DescrptSe(Descriptor):
     -----
     All of these descriptors have an environmental matrix and an
     embedding network (:meth:`deepmd.tf.utils.network.embedding_net`), so
-    they can share some similiar methods without defining them twice.
+    they can share some similar methods without defining them twice.
 
     Attributes
     ----------
@@ -103,7 +103,7 @@ class DescrptSe(Descriptor):
         descrpt_deriv: tf.Tensor,
         rij: tf.Tensor,
         nlist: tf.Tensor,
-    ):
+    ) -> None:
         """Pass the descrpt_reshape tensor as well as descrpt_deriv tensor from the frz graph_def.
 
         Parameters
@@ -162,7 +162,7 @@ class DescrptSe(Descriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict

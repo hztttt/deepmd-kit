@@ -30,7 +30,7 @@ class TestPairTabPreprocessExtrapolate(unittest.TestCase):
         self.tab4 = PairTab(filename=file_path, rcut=0.03)
         self.tab5 = PairTab(filename=file_path, rcut=0.032)
 
-    def test_deserialize(self):
+    def test_deserialize(self) -> None:
         deserialized_tab = PairTab.deserialize(self.tab1.serialize())
         np.testing.assert_allclose(self.tab1.vdata, deserialized_tab.vdata)
         np.testing.assert_allclose(self.tab1.rmin, deserialized_tab.rmin)
@@ -42,7 +42,7 @@ class TestPairTabPreprocessExtrapolate(unittest.TestCase):
         np.testing.assert_allclose(self.tab1.tab_info, deserialized_tab.tab_info)
         np.testing.assert_allclose(self.tab1.tab_data, deserialized_tab.tab_data)
 
-    def test_preprocess(self):
+    def test_preprocess(self) -> None:
         np.testing.assert_allclose(
             self.tab1.vdata,
             np.array(
@@ -72,7 +72,7 @@ class TestPairTabPreprocessExtrapolate(unittest.TestCase):
         )
 
         # for this test case, the table does not decay to zero at rcut = 0.22,
-        # in the cubic spline code, we use a fixed size grid, if will be a problem if we introduce variable gird size.
+        # in the cubic spline code, we use a fixed size grid, if will be a problem if we introduce variable grid size.
         # we will do post process to overwrite spline coefficient `a3`,`a2`,`a1`,`a0`, to ensure energy decays to `0`.
         np.testing.assert_allclose(
             self.tab3.vdata,
@@ -139,7 +139,7 @@ class TestPairTabPreprocessZero(unittest.TestCase):
         self.tab3 = PairTab(filename=file_path, rcut=0.028)
         self.tab4 = PairTab(filename=file_path, rcut=0.033)
 
-    def test_preprocess(self):
+    def test_preprocess(self) -> None:
         np.testing.assert_allclose(
             self.tab1.vdata,
             np.array(
@@ -210,7 +210,7 @@ class TestPairTabPreprocessUneven(unittest.TestCase):
         self.tab3 = PairTab(filename=file_path, rcut=0.03)
         self.tab4 = PairTab(filename=file_path, rcut=0.037)
 
-    def test_preprocess(self):
+    def test_preprocess(self) -> None:
         np.testing.assert_allclose(
             self.tab1.vdata,
             np.array(

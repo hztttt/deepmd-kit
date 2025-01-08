@@ -40,6 +40,21 @@ PRECISION_DICT = dict.fromkeys(VALID_PRECISION)
 
 doc_only_tf_supported = "(Supported Backend: TensorFlow) "
 doc_only_pt_supported = "(Supported Backend: PyTorch) "
+# descriptors
+doc_loc_frame = "Defines a local frame at each atom, and the compute the descriptor as local coordinates under this frame."
+doc_se_e2_a = "Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor."
+doc_se_e2_r = "Used by the smooth edition of Deep Potential. Only the distance between atoms is used to construct the descriptor."
+doc_se_e3 = "Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Three-body embedding will be used by this descriptor."
+doc_se_a_tpe = "Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Type embedding will be used by this descriptor."
+doc_se_atten = "Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Attention mechanism will be used by this descriptor."
+doc_se_atten_v2 = "Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Attention mechanism with new modifications will be used by this descriptor."
+doc_se_a_mask = "Used by the smooth edition of Deep Potential. It can accept a variable number of atoms in a frame (Non-PBC system). *aparam* are required as an indicator matrix for the real/virtual sign of input atoms."
+doc_hybrid = "Concatenate of a list of descriptors as a new descriptor."
+# fitting
+doc_ener = "Fit an energy model (potential energy surface)."
+doc_dos = "Fit a density of states model. The total density of states / site-projected density of states labels should be provided by `dos.npy` or `atom_dos.npy` in each data system. The file has number of frames lines and number of energy grid columns (times number of atoms in `atom_dos.npy`). See `loss` parameter."
+doc_dipole = "Fit an atomic dipole model. Global dipole labels or atomic dipole labels for all the selected atoms (see `sel_type`) should be provided by `dipole.npy` in each data system. The file either has number of frames lines and 3 times of number of selected atoms columns, or has number of frames lines and 3 columns. See `loss` parameter."
+doc_polar = "Fit an atomic polarizability model. Global polarizazbility labels or atomic polarizability labels for all the selected atoms (see `sel_type`) should be provided by `polarizability.npy` in each data system. The file with has number of frames lines and 9 times of number of selected atoms columns, or has number of frames lines and 9 columns. See `loss` parameter."
 
 
 def list_to_doc(xx):
@@ -53,7 +68,7 @@ def list_to_doc(xx):
     return "".join(items)
 
 
-def make_link(content, ref_key):
+def make_link(content, ref_key) -> str:
     return (
         f"`{content} <{ref_key}_>`_"
         if not dargs.RAW_ANCHOR
@@ -70,7 +85,7 @@ def deprecate_argument_extra_check(key: str) -> Callable[[dict], bool]:
         The name of the deprecated argument.
     """
 
-    def deprecate_something(data: Optional[dict]):
+    def deprecate_something(data: Optional[dict]) -> bool:
         if data is not None and key in data:
             warnings.warn(f"{key} has been removed and takes no effect.", FutureWarning)
             data.pop(key)
@@ -229,7 +244,7 @@ class ArgsPlugin:
 descrpt_args_plugin = ArgsPlugin()
 
 
-@descrpt_args_plugin.register("loc_frame", doc=doc_only_tf_supported)
+@descrpt_args_plugin.register("loc_frame", doc=doc_only_tf_supported + doc_loc_frame)
 def descrpt_local_frame_args():
     doc_sel_a = "A list of integers. The length of the list should be the same as the number of atom types in the system. `sel_a[i]` gives the selected number of type-i neighbors. The full relative coordinates of the neighbors are used by the descriptor."
     doc_sel_r = "A list of integers. The length of the list should be the same as the number of atom types in the system. `sel_r[i]` gives the selected number of type-i neighbors. Only relative distance of the neighbors are used by the descriptor. sel_a[i] + sel_r[i] is recommended to be larger than the maximally possible number of type-i neighbors in the cut-off radius."
@@ -250,11 +265,11 @@ def descrpt_local_frame_args():
     ]
 
 
-@descrpt_args_plugin.register("se_e2_a", alias=["se_a"])
+@descrpt_args_plugin.register("se_e2_a", alias=["se_a"], doc=doc_se_e2_a)
 def descrpt_se_a_args():
     doc_sel = 'This parameter set the number of selected neighbors for each type of atom. It can be:\n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. `sel[i]` is recommended to be larger than the maximally possible number of type-i neighbors in the cut-off radius. It is noted that the total sel value must be less than 4096 in a GPU environment.\n\n\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`"
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
@@ -318,11 +333,13 @@ def descrpt_se_a_args():
     ]
 
 
-@descrpt_args_plugin.register("se_e3", alias=["se_at", "se_a_3be", "se_t"])
+@descrpt_args_plugin.register(
+    "se_e3", alias=["se_at", "se_a_3be", "se_t"], doc=doc_se_e3
+)
 def descrpt_se_t_args():
     doc_sel = 'This parameter set the number of selected neighbors for each type of atom. It can be:\n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. `sel[i]` is recommended to be larger than the maximally possible number of type-i neighbors in the cut-off radius. It is noted that the total sel value must be less than 4096 in a GPU environment.\n\n\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`"
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
@@ -373,7 +390,9 @@ def descrpt_se_t_args():
     ]
 
 
-@descrpt_args_plugin.register("se_a_tpe", alias=["se_a_ebd"], doc=doc_only_tf_supported)
+@descrpt_args_plugin.register(
+    "se_a_tpe", alias=["se_a_ebd"], doc=doc_only_tf_supported + doc_se_a_tpe
+)
 def descrpt_se_a_tpe_args():
     doc_type_nchanl = "number of channels for type embedding"
     doc_type_nlayer = "number of hidden layers of type embedding net"
@@ -387,11 +406,11 @@ def descrpt_se_a_tpe_args():
     ]
 
 
-@descrpt_args_plugin.register("se_e2_r", alias=["se_r"])
+@descrpt_args_plugin.register("se_e2_r", alias=["se_r"], doc=doc_se_e2_r)
 def descrpt_se_r_args():
     doc_sel = 'This parameter set the number of selected neighbors for each type of atom. It can be:\n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. `sel[i]` is recommended to be larger than the maximally possible number of type-i neighbors in the cut-off radius. It is noted that the total sel value must be less than 4096 in a GPU environment.\n\n\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`"
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
@@ -446,7 +465,7 @@ def descrpt_se_r_args():
     ]
 
 
-@descrpt_args_plugin.register("hybrid")
+@descrpt_args_plugin.register("hybrid", doc=doc_hybrid)
 def descrpt_hybrid_args():
     doc_list = "A list of descriptor definitions"
 
@@ -468,7 +487,7 @@ def descrpt_se_atten_common_args():
     doc_sel = 'This parameter set the number of selected neighbors. Note that this parameter is a little different from that in other descriptors. Instead of separating each type of atoms, only the summation matters. And this number is highly related with the efficiency, thus one should not make it too large. Usually 200 or less is enough, far away from the GPU limitation 4096. It can be:\n\n\
     - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. Only the summation of `sel[i]` matters, and it is recommended to be less than 200.\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`"
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
@@ -538,7 +557,7 @@ def descrpt_se_atten_common_args():
     ]
 
 
-@descrpt_args_plugin.register("se_atten", alias=["dpa1"])
+@descrpt_args_plugin.register("se_atten", alias=["dpa1"], doc=doc_se_atten)
 def descrpt_se_atten_args():
     doc_smooth_type_embedding = f"Whether to use smooth process in attention weights calculation. {doc_only_tf_supported} When using stripped type embedding, whether to dot smooth factor on the network output of type embedding to keep the network smooth, instead of setting `set_davg_zero` to be True."
     doc_set_davg_zero = "Set the normalization average to zero. This option should be set when `se_atten` descriptor or `atom_ener` in the energy fitting is used"
@@ -565,7 +584,7 @@ def descrpt_se_atten_args():
         "The input mode of the type embedding. Supported modes are ['concat', 'strip']."
         "- 'concat': Concatenate the type embedding with the smoothed radial information as the union input for the embedding network. "
         "When `type_one_side` is False, the input is `input_ij = concat([r_ij, tebd_j, tebd_i])`. When `type_one_side` is True, the input is `input_ij = concat([r_ij, tebd_j])`. "
-        "The output is `out_ij = embeding(input_ij)` for the pair-wise representation of atom i with neighbor j."
+        "The output is `out_ij = embedding(input_ij)` for the pair-wise representation of atom i with neighbor j."
         "- 'strip': Use a separated embedding network for the type embedding and combine the output with the radial embedding network output. "
         f"When `type_one_side` is False, the input is `input_t = concat([tebd_j, tebd_i])`. {doc_only_pt_supported} When `type_one_side` is True, the input is `input_t = tebd_j`. "
         "The output is `out_ij = embeding_t(input_t) * embeding_s(r_ij) + embeding_s(r_ij)` for the pair-wise representation of atom i with neighbor j."
@@ -665,7 +684,7 @@ def descrpt_se_e3_tebd_args():
     doc_sel = 'This parameter set the number of selected neighbors. Note that this parameter is a little different from that in other descriptors. Instead of separating each type of atoms, only the summation matters. And this number is highly related with the efficiency, thus one should not make it too large. Usually 200 or less is enough, far away from the GPU limitation 4096. It can be:\n\n\
     - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. Only the summation of `sel[i]` matters, and it is recommended to be less than 200.\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`"
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
@@ -687,7 +706,7 @@ def descrpt_se_e3_tebd_args():
         "The input mode of the type embedding. Supported modes are ['concat', 'strip']."
         "- 'concat': Concatenate the type embedding with the smoothed angular information as the union input for the embedding network. "
         "The input is `input_jk = concat([angle_jk, tebd_j, tebd_k])`. "
-        "The output is `out_jk = embeding(input_jk)` for the three-body representation of atom i with neighbors j and k."
+        "The output is `out_jk = embedding(input_jk)` for the three-body representation of atom i with neighbors j and k."
         "- 'strip': Use a separated embedding network for the type embedding and combine the output with the angular embedding network output. "
         "The input is `input_t = concat([tebd_j, tebd_k])`."
         "The output is `out_jk = embeding_t(input_t) * embeding_s(angle_jk) + embeding_s(angle_jk)` for the three-body representation of atom i with neighbors j and k."
@@ -774,7 +793,7 @@ def descrpt_se_e3_tebd_args():
     ]
 
 
-@descrpt_args_plugin.register("se_atten_v2")
+@descrpt_args_plugin.register("se_atten_v2", doc=doc_se_atten_v2)
 def descrpt_se_atten_v2_args():
     doc_set_davg_zero = "Set the normalization average to zero. This option should be set when `se_atten` descriptor or `atom_ener` in the energy fitting is used"
     doc_trainable_ln = (
@@ -940,7 +959,9 @@ def dpa2_repinit_args():
     # repinit args
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`."
-    doc_nsel = "Maximally possible number of selected neighbors."
+    doc_nsel = 'Maximally possible number of selected neighbors. It can be:\n\n\
+    - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_neuron = (
         "Number of neurons in each hidden layers of the embedding net."
         "When two layers are of the same size or one layer is twice as large as the previous layer, "
@@ -952,7 +973,7 @@ def dpa2_repinit_args():
         "The input mode of the type embedding. Supported modes are ['concat', 'strip']."
         "- 'concat': Concatenate the type embedding with the smoothed radial information as the union input for the embedding network. "
         "When `type_one_side` is False, the input is `input_ij = concat([r_ij, tebd_j, tebd_i])`. When `type_one_side` is True, the input is `input_ij = concat([r_ij, tebd_j])`. "
-        "The output is `out_ij = embeding(input_ij)` for the pair-wise representation of atom i with neighbor j."
+        "The output is `out_ij = embedding(input_ij)` for the pair-wise representation of atom i with neighbor j."
         "- 'strip': Use a separated embedding network for the type embedding and combine the output with the radial embedding network output. "
         f"When `type_one_side` is False, the input is `input_t = concat([tebd_j, tebd_i])`. {doc_only_pt_supported} When `type_one_side` is True, the input is `input_t = tebd_j`. "
         "The output is `out_ij = embeding_t(input_t) * embeding_s(r_ij) + embeding_s(r_ij)` for the pair-wise representation of atom i with neighbor j."
@@ -972,7 +993,9 @@ def dpa2_repinit_args():
         "When two layers are of the same size or one layer is twice as large as the previous layer, "
         "a skip connection is built."
     )
-    doc_three_body_sel = "Maximally possible number of selected neighbors in the three-body representation."
+    doc_three_body_sel = 'Maximally possible number of selected neighbors in the three-body representation. It can be:\n\n\
+    - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_three_body_rcut = "The cut-off radius in the three-body representation."
     doc_three_body_rcut_smth = "Where to start smoothing in the three-body representation. For example the 1/r term is smoothed from `three_body_rcut` to `three_body_rcut_smth`."
 
@@ -980,7 +1003,7 @@ def dpa2_repinit_args():
         # repinit args
         Argument("rcut", float, doc=doc_rcut),
         Argument("rcut_smth", float, doc=doc_rcut_smth),
-        Argument("nsel", int, doc=doc_nsel),
+        Argument("nsel", [int, str], doc=doc_nsel),
         Argument(
             "neuron",
             list,
@@ -1066,7 +1089,11 @@ def dpa2_repinit_args():
             doc=doc_three_body_rcut_smth,
         ),
         Argument(
-            "three_body_sel", int, optional=True, default=40, doc=doc_three_body_sel
+            "three_body_sel",
+            [int, str],
+            optional=True,
+            default=40,
+            doc=doc_three_body_sel,
         ),
     ]
 
@@ -1076,7 +1103,9 @@ def dpa2_repformer_args():
     # repformer args
     doc_rcut = "The cut-off radius."
     doc_rcut_smth = "Where to start smoothing. For example the 1/r term is smoothed from `rcut` to `rcut_smth`."
-    doc_nsel = "Maximally possible number of selected neighbors."
+    doc_nsel = 'Maximally possible number of selected neighbors. It can be:\n\n\
+    - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     doc_nlayers = "The number of repformer layers."
     doc_g1_dim = "The dimension of invariant single-atom representation."
     doc_g2_dim = "The dimension of invariant pair-atom representation."
@@ -1139,7 +1168,7 @@ def dpa2_repformer_args():
         # repformer args
         Argument("rcut", float, doc=doc_rcut),
         Argument("rcut_smth", float, doc=doc_rcut_smth),
-        Argument("nsel", int, doc=doc_nsel),
+        Argument("nsel", [int, str], doc=doc_nsel),
         Argument(
             "nlayers",
             int,
@@ -1333,11 +1362,11 @@ def descrpt_se_a_ebd_v2_args():
     return descrpt_se_a_args()
 
 
-@descrpt_args_plugin.register("se_a_mask", doc=doc_only_tf_supported)
+@descrpt_args_plugin.register("se_a_mask", doc=doc_only_tf_supported + doc_se_a_mask)
 def descrpt_se_a_mask_args():
     doc_sel = 'This parameter sets the number of selected neighbors for each type of atom. It can be:\n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. `sel[i]` is recommended to be larger than the maximally possible number of type-i neighbors in the cut-off radius. It is noted that the total sel value must be less than 4096 in a GPU environment.\n\n\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
 
     doc_neuron = "Number of neurons in each hidden layers of the embedding net. When two layers are of the same size or one layer is twice as large as the previous layer, a skip connection is built."
     doc_axis_neuron = "Size of the submatrix of G (embedding matrix)."
@@ -1387,24 +1416,7 @@ def descrpt_se_a_mask_args():
 
 
 def descrpt_variant_type_args(exclude_hybrid: bool = False) -> Variant:
-    link_lf = make_link("loc_frame", "model/descriptor[loc_frame]")
-    link_se_e2_a = make_link("se_e2_a", "model/descriptor[se_e2_a]")
-    link_se_e2_r = make_link("se_e2_r", "model/descriptor[se_e2_r]")
-    link_se_e3 = make_link("se_e3", "model/descriptor[se_e3]")
-    link_se_a_tpe = make_link("se_a_tpe", "model/descriptor[se_a_tpe]")
-    link_hybrid = make_link("hybrid", "model/descriptor[hybrid]")
-    link_se_atten = make_link("se_atten", "model/descriptor[se_atten]")
-    link_se_atten_v2 = make_link("se_atten_v2", "model/descriptor[se_atten_v2]")
-    doc_descrpt_type = "The type of the descritpor. See explanation below. \n\n\
-- `loc_frame`: Defines a local frame at each atom, and the compute the descriptor as local coordinates under this frame.\n\n\
-- `se_e2_a`: Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor.\n\n\
-- `se_e2_r`: Used by the smooth edition of Deep Potential. Only the distance between atoms is used to construct the descriptor.\n\n\
-- `se_e3`: Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Three-body embedding will be used by this descriptor.\n\n\
-- `se_a_tpe`: Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Type embedding will be used by this descriptor.\n\n\
-- `se_atten`: Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Attention mechanism will be used by this descriptor.\n\n\
-- `se_atten_v2`: Used by the smooth edition of Deep Potential. The full relative coordinates are used to construct the descriptor. Attention mechanism with new modifications will be used by this descriptor.\n\n\
-- `se_a_mask`: Used by the smooth edition of Deep Potential. It can accept a variable number of atoms in a frame (Non-PBC system). *aparam* are required as an indicator matrix for the real/virtual sign of input atoms. \n\n\
-- `hybrid`: Concatenate of a list of descriptors as a new descriptor."
+    doc_descrpt_type = "The type of the descriptor."
 
     return Variant(
         "type",
@@ -1417,7 +1429,7 @@ def descrpt_variant_type_args(exclude_hybrid: bool = False) -> Variant:
 fitting_args_plugin = ArgsPlugin()
 
 
-@fitting_args_plugin.register("ener")
+@fitting_args_plugin.register("ener", doc=doc_ener)
 def fitting_ener():
     doc_numb_fparam = "The dimension of the frame parameter. If set to >0, file `fparam.npy` should be included to provided the input fparams."
     doc_numb_aparam = "The dimension of the atomic parameter. If set to >0, file `aparam.npy` should be included to provided the input aparams."
@@ -1428,7 +1440,7 @@ def fitting_ener():
     doc_trainable = f"Whether the parameters in the fitting net are trainable. This option can be\n\n\
 - bool: True if all parameters of the fitting net are trainable, False otherwise.\n\n\
 - list of bool{doc_only_tf_supported}: Specifies if each layer is trainable. Since the fitting net is composed by hidden layers followed by a output layer, the length of this list should be equal to len(`neuron`)+1."
-    doc_rcond = "The condition number used to determine the inital energy shift for each type of atoms. See `rcond` in :py:meth:`numpy.linalg.lstsq` for more details."
+    doc_rcond = "The condition number used to determine the initial energy shift for each type of atoms. See `rcond` in :py:meth:`numpy.linalg.lstsq` for more details."
     doc_seed = "Random seed for parameter initialization of the fitting net"
     doc_atom_ener = "Specify the atomic energy in vacuum for each type"
     doc_layer_name = (
@@ -1493,7 +1505,7 @@ def fitting_ener():
     ]
 
 
-@fitting_args_plugin.register("dos")
+@fitting_args_plugin.register("dos", doc=doc_dos)
 def fitting_dos():
     doc_numb_fparam = "The dimension of the frame parameter. If set to >0, file `fparam.npy` should be included to provided the input fparams."
     doc_numb_aparam = "The dimension of the atomic parameter. If set to >0, file `aparam.npy` should be included to provided the input aparams."
@@ -1503,8 +1515,8 @@ def fitting_dos():
     doc_resnet_dt = 'Whether to use a "Timestep" in the skip connection'
     doc_trainable = "Whether the parameters in the fitting net are trainable. This option can be\n\n\
 - bool: True if all parameters of the fitting net are trainable, False otherwise.\n\n\
-- list of bool: Specifies if each layer is trainable. Since the fitting net is composed by hidden layers followed by a output layer, the length of tihs list should be equal to len(`neuron`)+1."
-    doc_rcond = "The condition number used to determine the inital energy shift for each type of atoms. See `rcond` in :py:meth:`numpy.linalg.lstsq` for more details."
+- list of bool: Specifies if each layer is trainable. Since the fitting net is composed by hidden layers followed by a output layer, the length of this list should be equal to len(`neuron`)+1."
+    doc_rcond = "The condition number used to determine the initial energy shift for each type of atoms. See `rcond` in :py:meth:`numpy.linalg.lstsq` for more details."
     doc_seed = "Random seed for parameter initialization of the fitting net"
     doc_numb_dos = (
         "The number of gridpoints on which the DOS is evaluated (NEDOS in VASP)"
@@ -1581,8 +1593,10 @@ def fitting_property():
     ]
 
 
-@fitting_args_plugin.register("polar")
+@fitting_args_plugin.register("polar", doc=doc_polar)
 def fitting_polar():
+    doc_numb_fparam = "The dimension of the frame parameter. If set to >0, file `fparam.npy` should be included to provided the input fparams."
+    doc_numb_aparam = "The dimension of the atomic parameter. If set to >0, file `aparam.npy` should be included to provided the input aparams."
     doc_neuron = "The number of neurons in each hidden layers of the fitting net. When two hidden layers are of the same size, a skip connection is built."
     doc_activation_function = f'The activation function in the fitting net. Supported activation functions are {list_to_doc(ACTIVATION_FN_DICT.keys())} Note that "gelu" denotes the custom operator version, and "gelu_tf" denotes the TF standard version. If you set "None" or "none" here, no activation function will be used.'
     doc_resnet_dt = 'Whether to use a "Timestep" in the skip connection'
@@ -1597,6 +1611,20 @@ def fitting_polar():
     doc_shift_diag = "Whether to shift the diagonal of polar, which is beneficial to training. Default is true."
 
     return [
+        Argument(
+            "numb_fparam",
+            int,
+            optional=True,
+            default=0,
+            doc=doc_only_pt_supported + doc_numb_fparam,
+        ),
+        Argument(
+            "numb_aparam",
+            int,
+            optional=True,
+            default=0,
+            doc=doc_only_pt_supported + doc_numb_aparam,
+        ),
         Argument(
             "neuron",
             list[int],
@@ -1635,8 +1663,10 @@ def fitting_polar():
 #    return fitting_polar()
 
 
-@fitting_args_plugin.register("dipole")
+@fitting_args_plugin.register("dipole", doc=doc_dipole)
 def fitting_dipole():
+    doc_numb_fparam = "The dimension of the frame parameter. If set to >0, file `fparam.npy` should be included to provided the input fparams."
+    doc_numb_aparam = "The dimension of the atomic parameter. If set to >0, file `aparam.npy` should be included to provided the input aparams."
     doc_neuron = "The number of neurons in each hidden layers of the fitting net. When two hidden layers are of the same size, a skip connection is built."
     doc_activation_function = f'The activation function in the fitting net. Supported activation functions are {list_to_doc(ACTIVATION_FN_DICT.keys())} Note that "gelu" denotes the custom operator version, and "gelu_tf" denotes the TF standard version. If you set "None" or "none" here, no activation function will be used.'
     doc_resnet_dt = 'Whether to use a "Timestep" in the skip connection'
@@ -1644,6 +1674,20 @@ def fitting_dipole():
     doc_sel_type = "The atom types for which the atomic dipole will be provided. If not set, all types will be selected."
     doc_seed = "Random seed for parameter initialization of the fitting net"
     return [
+        Argument(
+            "numb_fparam",
+            int,
+            optional=True,
+            default=0,
+            doc=doc_only_pt_supported + doc_numb_fparam,
+        ),
+        Argument(
+            "numb_aparam",
+            int,
+            optional=True,
+            default=0,
+            doc=doc_only_pt_supported + doc_numb_aparam,
+        ),
         Argument(
             "neuron",
             list[int],
@@ -1674,11 +1718,7 @@ def fitting_dipole():
 
 #   YWolfeee: Delete global polar mode, merge it into polar mode and use loss setting to support.
 def fitting_variant_type_args():
-    doc_descrpt_type = "The type of the fitting. See explanation below. \n\n\
-- `ener`: Fit an energy model (potential energy surface).\n\n\
-- `dos` : Fit a density of states model. The total density of states / site-projected density of states labels should be provided by `dos.npy` or `atom_dos.npy` in each data system. The file has number of frames lines and number of energy grid columns (times number of atoms in `atom_dos.npy`). See `loss` parameter. \n\n\
-- `dipole`: Fit an atomic dipole model. Global dipole labels or atomic dipole labels for all the selected atoms (see `sel_type`) should be provided by `dipole.npy` in each data system. The file either has number of frames lines and 3 times of number of selected atoms columns, or has number of frames lines and 3 columns. See `loss` parameter.\n\n\
-- `polar`: Fit an atomic polarizability model. Global polarizazbility labels or atomic polarizability labels for all the selected atoms (see `sel_type`) should be provided by `polarizability.npy` in each data system. The file eith has number of frames lines and 9 times of number of selected atoms columns, or has number of frames lines and 9 columns. See `loss` parameter.\n\n"
+    doc_descrpt_type = "The type of the fitting."
 
     return Variant(
         "type",
@@ -1692,7 +1732,7 @@ def fitting_variant_type_args():
 #  --- Modifier configurations: --- #
 def modifier_dipole_charge():
     doc_model_name = "The name of the frozen dipole model file."
-    doc_model_charge_map = f"The charge of the WFCC. The list length should be the same as the {make_link('sel_type', 'model/fitting_net[dipole]/sel_type')}. "
+    doc_model_charge_map = f"The charge of the WFCC. The list length should be the same as the {make_link('sel_type', 'model[standard]/fitting_net[dipole]/sel_type')}. "
     doc_sys_charge_map = f"The charge of real atoms. The list length should be the same as the {make_link('type_map', 'model/type_map')}"
     doc_ewald_h = "The grid spacing of the FFT grid. Unit is A"
     doc_ewald_beta = f"The splitting parameter of Ewald sum. Unit is A^{-1}"
@@ -1709,12 +1749,14 @@ def modifier_dipole_charge():
 
 
 def modifier_variant_type_args():
-    doc_modifier_type = "The type of modifier. See explanation below.\n\n\
--`dipole_charge`: Use WFCC to model the electronic structure of the system. Correct the long-range interaction"
+    doc_modifier_type = "The type of modifier."
+    doc_dipole_charge = "Use WFCC to model the electronic structure of the system. Correct the long-range interaction."
     return Variant(
         "type",
         [
-            Argument("dipole_charge", dict, modifier_dipole_charge()),
+            Argument(
+                "dipole_charge", dict, modifier_dipole_charge(), doc=doc_dipole_charge
+            ),
         ],
         optional=False,
         doc=doc_modifier_type,
@@ -1759,10 +1801,10 @@ def model_args(exclude_hybrid=False):
     doc_data_stat_nbatch = "The model determines the normalization from the statistics of the data. This key specifies the number of `frames` in each `system` used for statistics."
     doc_data_stat_protect = "Protect parameter for atomic energy regression."
     doc_data_bias_nsample = "The number of training samples in a system to compute and change the energy bias."
-    doc_type_embedding = "The type embedding."
+    doc_type_embedding = "The type embedding. In other backends, the type embedding is already included in the descriptor."
     doc_modifier = "The modifier of model output."
     doc_use_srtab = "The table for the short-range pairwise interaction added on top of DP. The table is a text data file with (N_t + 1) * N_t / 2 + 1 columes. The first colume is the distance between atoms. The second to the last columes are energies for pairs of certain types. For example we have two atom types, 0 and 1. The columes from 2nd to 4th are for 0-0, 0-1 and 1-1 correspondingly."
-    doc_smin_alpha = "The short-range tabulated interaction will be swithed according to the distance of the nearest neighbor. This distance is calculated by softmin. This parameter is the decaying parameter in the softmin. It is only required when `use_srtab` is provided."
+    doc_smin_alpha = "The short-range tabulated interaction will be switched according to the distance of the nearest neighbor. This distance is calculated by softmin. This parameter is the decaying parameter in the softmin. It is only required when `use_srtab` is provided."
     doc_sw_rmin = "The lower boundary of the interpolation between short-range tabulated interaction and DP. It is only required when `use_srtab` is provided."
     doc_sw_rmax = "The upper boundary of the interpolation between short-range tabulated interaction and DP. It is only required when `use_srtab` is provided."
     doc_srtab_add_bias = "Whether add energy bias from the statistics of the data to short-range tabulated atomic energy. It only takes effect when `use_srtab` is provided."
@@ -1914,7 +1956,7 @@ def standard_model_args() -> Argument:
                 doc=doc_fitting,
             ),
         ],
-        doc="Stardard model, which contains a descriptor and a fitting.",
+        doc="Standard model, which contains a descriptor and a fitting.",
     )
     return ca
 
@@ -1959,7 +2001,7 @@ def pairtab_model_args() -> Argument:
     doc_sel = 'This parameter set the number of selected neighbors. Note that this parameter is a little different from that in other descriptors. Instead of separating each type of atoms, only the summation matters. And this number is highly related with the efficiency, thus one should not make it too large. Usually 200 or less is enough, far away from the GPU limitation 4096. It can be:\n\n\
     - `int`. The maximum number of neighbor atoms to be considered. We recommend it to be less than 200. \n\n\
     - `list[int]`. The length of the list should be the same as the number of atom types in the system. `sel[i]` gives the selected number of type-i neighbors. Only the summation of `sel[i]` matters, and it is recommended to be less than 200.\
-    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wraped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
+    - `str`. Can be "auto:factor" or "auto". "factor" is a float number larger than 1. This option will automatically determine the `sel`. In detail it counts the maximal number of neighbors with in the cutoff radius for each type of neighbor, then multiply the maximum by the "factor". Finally the number is wrapped up to 4 divisible. The option "auto" is equivalent to "auto:1.1".'
     ca = Argument(
         "pairtab",
         dict,
@@ -2050,7 +2092,7 @@ def learning_rate_variant_type_args():
 
 def learning_rate_args(fold_subdoc: bool = False) -> Argument:
     doc_scale_by_worker = "When parallel training or batch size scaled, how to alter learning rate. Valid values are `linear`(default), `sqrt` or `none`."
-    doc_lr = "The definitio of learning rate"
+    doc_lr = "The definition of learning rate"
     return Argument(
         "learning_rate",
         dict,
@@ -2071,7 +2113,7 @@ def learning_rate_args(fold_subdoc: bool = False) -> Argument:
 
 
 #  --- Loss configurations: --- #
-def start_pref(item, label=None, abbr=None):
+def start_pref(item, label=None, abbr=None) -> str:
     if label is None:
         label = item
     if abbr is None:
@@ -2079,7 +2121,7 @@ def start_pref(item, label=None, abbr=None):
     return f"The prefactor of {item} loss at the start of the training. Should be larger than or equal to 0. If set to none-zero value, the {label} label should be provided by file {label}.npy in each data system. If both start_pref_{abbr} and limit_pref_{abbr} are set to 0, then the {item} will be ignored."
 
 
-def limit_pref(item):
+def limit_pref(item) -> str:
     return f"The prefactor of {item} loss at the limit of the training, Should be larger than or equal to 0. i.e. the training step goes to infinity."
 
 
@@ -2325,10 +2367,10 @@ def loss_dos():
     doc_start_pref_dos = start_pref("Density of State (DOS)")
     doc_limit_pref_dos = limit_pref("Density of State (DOS)")
     doc_start_pref_cdf = start_pref(
-        "Cumulative Distribution Function (cumulative intergral of DOS)"
+        "Cumulative Distribution Function (cumulative integral of DOS)"
     )
     doc_limit_pref_cdf = limit_pref(
-        "Cumulative Distribution Function (cumulative intergral of DOS)"
+        "Cumulative Distribution Function (cumulative integral of DOS)"
     )
     doc_start_pref_ados = start_pref("atomic DOS (site-projected DOS)")
     doc_limit_pref_ados = limit_pref("atomic DOS (site-projected DOS)")
@@ -2483,7 +2525,7 @@ If MPI is used, the value should be considered as the batch size per task.'
     doc_auto_prob_style = 'Determine the probability of systems automatically. The method is assigned by this key and can be\n\n\
 - "prob_uniform"  : the probability all the systems are equal, namely 1.0/self.get_nsystems()\n\n\
 - "prob_sys_size" : the probability of a system is proportional to the number of batches in the system\n\n\
-- "prob_sys_size;stt_idx:end_idx:weight;stt_idx:end_idx:weight;..." : the list of systems is devided into blocks. A block is specified by `stt_idx:end_idx:weight`, where `stt_idx` is the starting index of the system, `end_idx` is then ending (not including) index of the system, the probabilities of the systems in this block sums up to `weight`, and the relatively probabilities within this block is proportional to the number of batches in the system.'
+- "prob_sys_size;stt_idx:end_idx:weight;stt_idx:end_idx:weight;..." : the list of systems is divided into blocks. A block is specified by `stt_idx:end_idx:weight`, where `stt_idx` is the starting index of the system, `end_idx` is then ending (not including) index of the system, the probabilities of the systems in this block sums up to `weight`, and the relatively probabilities within this block is proportional to the number of batches in the system.'
     doc_sys_probs = (
         "A list of float if specified. "
         "Should be of the same length as `systems`, "
@@ -2548,7 +2590,7 @@ def validation_data_args():  # ! added by Ziyao: new specification style for dat
     doc_auto_prob_style = 'Determine the probability of systems automatically. The method is assigned by this key and can be\n\n\
 - "prob_uniform"  : the probability all the systems are equal, namely 1.0/self.get_nsystems()\n\n\
 - "prob_sys_size" : the probability of a system is proportional to the number of batches in the system\n\n\
-- "prob_sys_size;stt_idx:end_idx:weight;stt_idx:end_idx:weight;..." : the list of systems is devided into blocks. A block is specified by `stt_idx:end_idx:weight`, where `stt_idx` is the starting index of the system, `end_idx` is then ending (not including) index of the system, the probabilities of the systems in this block sums up to `weight`, and the relatively probabilities within this block is proportional to the number of batches in the system.'
+- "prob_sys_size;stt_idx:end_idx:weight;stt_idx:end_idx:weight;..." : the list of systems is divided into blocks. A block is specified by `stt_idx:end_idx:weight`, where `stt_idx` is the starting index of the system, `end_idx` is then ending (not including) index of the system, the probabilities of the systems in this block sums up to `weight`, and the relatively probabilities within this block is proportional to the number of batches in the system.'
     doc_sys_probs = (
         "A list of float if specified. "
         "Should be of the same length as `systems`, "
@@ -2661,7 +2703,7 @@ def training_args(
         "doing least square on the errors to add the target shift on the bias."
     )
     doc_disp_training = "Displaying verbose information during training."
-    doc_time_training = "Timing durining training."
+    doc_time_training = "Timing during training."
     doc_profiling = "Export the profiling results to the Chrome JSON file for performance analysis, driven by the legacy TensorFlow profiling API or PyTorch Profiler. The output file will be saved to `profiling_file`."
     doc_profiling_file = "Output file for profiling."
     doc_enable_profiler = "Export the profiling results to the TensorBoard log for performance analysis, driven by TensorFlow Profiler (available in TensorFlow 2.3) or PyTorch Profiler. The log will be saved to `tensorboard_log_dir`."

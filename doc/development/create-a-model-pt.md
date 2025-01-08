@@ -6,7 +6,7 @@
 In the following context, we use the PyTorch backend as the example, while it also applies to other backends listed above.
 :::
 
-If you'd like to create a new model that isn't covered by the existing DeePMD-kit library, but reuse DeePMD-kit's other efficient modules such as data processing, trainner, etc, you may want to read this section.
+If you'd like to create a new model that isn't covered by the existing DeePMD-kit library, but reuse DeePMD-kit's other efficient modules such as data processing, trainer, etc, you may want to read this section.
 
 To incorporate your custom model you'll need to:
 
@@ -137,6 +137,15 @@ class SomeAtomicModel(BaseAtomicModel, torch.nn.Module):
         pass
 ```
 
+### Floating-point precision
+
+When creating a new component, the floating-point precision should obey the [Floating-point precision of the model](../model/precision.md) section.
+In implementation, the component should
+
+- store parameters in the component precision, except those for output normalization;
+- store output normalization parameters in {py:data}`deepmd.pt.utils.env.GLOBAL_PT_FLOAT_PRECISION`;
+- before input normalization, cast the input tensor to the component precision; before output normalization, cast the output tensor to the {py:data}`deepmd.pt.utils.env.GLOBAL_PT_FLOAT_PRECISION`.
+
 ## Register new arguments
 
 To let someone uses your new component in their input file, you need to create a new method that returns some `Argument` of your new component, and then register new arguments. For example, the code below
@@ -171,6 +180,7 @@ The arguments here should be consistent with the class arguments of your new com
 ## Package new codes
 
 You may package new codes into a new Python package if you don't want to contribute it to the main DeePMD-kit repository.
+A good example is [DeePMD-GNN](https://gitlab.com/RutgersLBSR/deepmd-gnn).
 It's crucial to add your new component to `project.entry-points."deepmd.pt"` in `pyproject.toml`:
 
 ```toml

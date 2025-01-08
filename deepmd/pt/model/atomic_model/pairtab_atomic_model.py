@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Callable,
     Optional,
@@ -59,7 +58,7 @@ class PairTabAtomicModel(BaseAtomicModel):
     rcond : float, optional
         The condition number for the regression of atomic energy.
     atom_ener
-        Specifying atomic energy contribution in vacuum. The `set_davg_zero` key in the descrptor should be set.
+        Specifying atomic energy contribution in vacuum. The `set_davg_zero` key in the descriptor should be set.
 
     """
 
@@ -70,12 +69,12 @@ class PairTabAtomicModel(BaseAtomicModel):
         sel: Union[int, list[int]],
         type_map: list[str],
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(type_map, **kwargs)
         super().init_out_stat()
         self.tab_file = tab_file
-        self.rcut = rcut
-        self.tab = self._set_pairtab(tab_file, rcut)
+        self.rcut = float(rcut)
+        self.tab = self._set_pairtab(tab_file, self.rcut)
 
         self.type_map = type_map
         self.ntypes = len(type_map)
@@ -104,7 +103,7 @@ class PairTabAtomicModel(BaseAtomicModel):
         )
 
         # self.model_type = "ener"
-        # self.model_version = MODEL_VERSION ## this shoud be in the parent class
+        # self.model_version = MODEL_VERSION ## this should be in the parent class
 
         if isinstance(sel, int):
             self.sel = sel
@@ -195,7 +194,7 @@ class PairTabAtomicModel(BaseAtomicModel):
 
     @classmethod
     def deserialize(cls, data) -> "PairTabAtomicModel":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         tab = PairTab.deserialize(data.pop("tab"))
         data.pop("@class", None)
@@ -218,7 +217,7 @@ class PairTabAtomicModel(BaseAtomicModel):
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         stat_file_path: Optional[DPPath] = None,
-    ):
+    ) -> None:
         """
         Compute the output statistics (e.g. energy bias) for the fitting net from packed data.
 
@@ -269,9 +268,11 @@ class PairTabAtomicModel(BaseAtomicModel):
         # i_type : (nframes, nloc), this is atype.
         # j_type : (nframes, nloc, nnei)
         j_type = extended_atype[
-            torch.arange(extended_atype.size(0), device=extended_coord.device)[  # pylint: disable=no-explicit-dtype
-                :, None, None
-            ],
+            torch.arange(
+                extended_atype.size(0),
+                device=extended_coord.device,
+                dtype=torch.int64,
+            )[:, None, None],
             masked_nlist,
         ]
 
@@ -483,3 +484,14 @@ class PairTabAtomicModel(BaseAtomicModel):
         If False, the shape is (nframes, nloc, ndim).
         """
         return False
+
+    def enable_compression(
+        self,
+        min_nbor_dist: float,
+        table_extrapolate: float = 5,
+        table_stride_1: float = 0.01,
+        table_stride_2: float = 0.1,
+        check_frequency: int = -1,
+    ) -> None:
+        """Pairtab model does not support compression."""
+        pass

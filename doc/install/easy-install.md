@@ -60,32 +60,6 @@ Maintainers will build packages in the conda-forge organization together with ot
 :::
 ::::
 
-One may create an environment that contains the CPU version of DeePMD-kit and LAMMPS:
-
-```bash
-conda create -n deepmd deepmd-kit=*=*cpu libdeepmd=*=*cpu lammps -c https://conda.deepmodeling.com -c defaults
-```
-
-Or one may want to create a GPU environment containing [CUDA Toolkit](https://docs.nvidia.com/deploy/cuda-compatibility/index.html#binary-compatibility__table-toolkit-driver):
-
-```bash
-conda create -n deepmd deepmd-kit=*=*gpu libdeepmd=*=*gpu lammps cudatoolkit=11.6 horovod -c https://conda.deepmodeling.com -c defaults
-```
-
-One could change the CUDA Toolkit version from `10.2` or `11.6`.
-
-One may specify the DeePMD-kit version such as `2.2.9` using
-
-```bash
-conda create -n deepmd deepmd-kit=2.2.9=*cpu libdeepmd=2.2.9=*cpu lammps horovod -c https://conda.deepmodeling.com -c defaults
-```
-
-One may enable the environment using
-
-```bash
-conda activate deepmd
-```
-
 ## Install with docker
 
 A docker for installing the DeePMD-kit is available [here](https://github.com/deepmodeling/deepmd-kit/pkgs/container/deepmd-kit).
@@ -104,44 +78,118 @@ docker pull ghcr.io/deepmodeling/deepmd-kit:2.2.8_cuda12.0_gpu
 
 ## Install Python interface with pip
 
-If you have no existing TensorFlow installed, you can use `pip` to install the pre-built package of the Python interface with CUDA 12 supported:
+[Create a new environment](https://docs.deepmodeling.com/faq/conda.html#how-to-create-a-new-conda-pip-environment), and then execute the following command:
+
+:::::::{tab-set}
+
+::::::{tab-item} TensorFlow {{ tensorflow_icon }}
+
+:::::{tab-set}
+
+::::{tab-item} CUDA 12
 
 ```bash
-pip install deepmd-kit[gpu,cu12,torch]
+pip install deepmd-kit[gpu,cu12]
 ```
 
 `cu12` is required only when CUDA Toolkit and cuDNN were not installed.
 
-To install the package built against CUDA 11.8, use
+::::
+
+::::{tab-item} CUDA 11
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu118
 pip install deepmd-kit-cu11[gpu,cu11]
 ```
 
-Or install the CPU version without CUDA supported:
+::::
+
+::::{tab-item} CPU
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install deepmd-kit[cpu]
 ```
+
+::::
+
+:::::
 
 [The LAMMPS module](../third-party/lammps-command.md) and [the i-PI driver](../third-party/ipi.md) are only provided on Linux and macOS for the TensorFlow backend. To install LAMMPS and/or i-PI, add `lmp` and/or `ipi` to extras:
 
 ```bash
-pip install deepmd-kit[gpu,cu12,torch,lmp,ipi]
+pip install deepmd-kit[gpu,cu12,lmp,ipi]
 ```
 
 MPICH is required for parallel running.
 
-:::{Warning}
-When installing from pip, only the TensorFlow {{ tensorflow_icon }} backend is supported with LAMMPS and i-PI.
-:::
+::::::
 
-It is suggested to install the package into an isolated environment.
+::::::{tab-item} PyTorch {{ pytorch_icon }}
+
+:::::{tab-set}
+
+::::{tab-item} CUDA 12
+
+```bash
+pip install deepmd-kit[torch]
+```
+
+::::
+
+::::{tab-item} CUDA 11.8
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+pip install deepmd-kit-cu11
+```
+
+::::
+
+::::{tab-item} CPU
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install deepmd-kit
+```
+
+::::
+
+:::::
+
+::::::
+
+::::::{tab-item} JAX {{ jax_icon }}
+
+:::::{tab-set}
+
+::::{tab-item} CUDA 12
+
+```bash
+pip install deepmd-kit[jax] jax[cuda12]
+```
+
+::::
+
+::::{tab-item} CPU
+
+```bash
+pip install deepmd-kit[jax]
+```
+
+::::
+
+:::::
+
+To generate a SavedModel and use [the LAMMPS module](../third-party/lammps-command.md) and [the i-PI driver](../third-party/ipi.md),
+you need to install the TensorFlow.
+Switch to the TensorFlow {{ tensorflow_icon }} tab for more information.
+
+::::::
+
+:::::::
+
 The supported platform includes Linux x86-64 and aarch64 with GNU C Library 2.28 or above, macOS x86-64 and arm64, and Windows x86-64.
-A specific version of TensorFlow and PyTorch which is compatible with DeePMD-kit will be also installed.
 
 :::{Warning}
-If your platform is not supported, or you want to build against the installed TensorFlow, or you want to enable ROCM support, please [build from source](install-from-source.md).
+If your platform is not supported, or you want to build against the installed backends, or you want to enable ROCM support, please [build from source](install-from-source.md).
 :::

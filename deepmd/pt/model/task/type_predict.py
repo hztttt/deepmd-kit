@@ -14,12 +14,14 @@ from deepmd.pt.model.task import (
 
 
 class TypePredictNet(Fitting):
-    def __init__(self, feature_dim, ntypes, activation_function="gelu", **kwargs):
+    def __init__(
+        self, feature_dim, ntypes, activation_function="gelu", **kwargs
+    ) -> None:
         """Construct a type predict net.
 
         Args:
         - feature_dim: Input dm.
-        - ntypes: Numer of types to predict.
+        - ntypes: Number of types to predict.
         - activation_function: Activate function.
         """
         super().__init__()

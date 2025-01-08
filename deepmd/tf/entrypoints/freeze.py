@@ -59,7 +59,7 @@ def _transfer_fitting_net_trainable_variables(sess, old_graph_def, raw_graph_def
             raw_graph_def,  # The graph_def is used to retrieve the nodes
             [
                 n + "_1" for n in old_graph_nodes
-            ],  # The output node names are used to select the usefull nodes
+            ],  # The output node names are used to select the useful nodes
         )
     except AssertionError:
         # if there's no additional nodes
@@ -123,6 +123,8 @@ def _make_node_names(
             "o_atom_energy",
             "o_atom_virial",
             "spin_attr/ntypes_spin",
+            "spin_attr/virtual_len",
+            "spin_attr/spin_norm",
             "fitting_attr/dfparam",
             "fitting_attr/daparam",
             "fitting_attr/aparam_nall",
@@ -228,7 +230,7 @@ def freeze_graph(
     out_graph_name,
     node_names=None,
     out_suffix="",
-):
+) -> None:
     """Freeze the single graph with chosen out_suffix.
 
     Parameters
@@ -258,6 +260,8 @@ def freeze_graph(
         "train_attr/min_nbor_dist",
         "fitting_attr/aparam_nall",
         "spin_attr/ntypes_spin",
+        "spin_attr/virtual_len",
+        "spin_attr/spin_norm",
     ]
     different_set = set(output_node) - set(input_node)
     if different_set:
@@ -275,7 +279,7 @@ def freeze_graph(
     output_graph_def = tf.graph_util.convert_variables_to_constants(
         sess,  # The session is used to retrieve the weights
         input_graph,  # The graph_def is used to retrieve the nodes
-        output_node,  # The output node names are used to select the usefull nodes
+        output_node,  # The output node names are used to select the useful nodes
     )
 
     # If we need to transfer the fitting net variables
@@ -296,7 +300,7 @@ def freeze(
     node_names: Optional[str] = None,
     nvnmd_weight: Optional[str] = None,
     **kwargs,
-):
+) -> None:
     """Freeze the graph in supplied folder.
 
     Parameters
@@ -334,7 +338,7 @@ def freeze(
 
     # We import the meta graph and retrieve a Saver
     try:
-        # In case paralle training
+        # In case parallel training
         import horovod.tensorflow as HVD
     except ImportError:
         pass

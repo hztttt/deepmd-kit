@@ -38,7 +38,7 @@ from deepmd.tf.nvnmd.entrypoints.train import (
 __all__ = ["main", "parse_args", "get_ll", "main_parser"]
 
 
-def main(args: Optional[Union[list[str], argparse.Namespace]] = None):
+def main(args: Optional[Union[list[str], argparse.Namespace]] = None) -> None:
     """DeePMD-Kit entry point.
 
     Parameters
@@ -60,7 +60,7 @@ def main(args: Optional[Union[list[str], argparse.Namespace]] = None):
         args = parse_args(args=args)
 
     # do not set log handles for None, it is useless
-    # log handles for train will be set separatelly
+    # log handles for train will be set separately
     # when the use of MPI will be determined in `RunOptions`
     if args.command not in (None, "train"):
         set_log_handles(args.log_level, Path(args.log_path) if args.log_path else None)
@@ -77,6 +77,12 @@ def main(args: Optional[Union[list[str], argparse.Namespace]] = None):
     elif args.command == "transfer":
         transfer(**dict_args)
     elif args.command == "compress":
+        dict_args["input"] = format_model_suffix(
+            dict_args["input"], preferred_backend=args.backend, strict_prefer=True
+        )
+        dict_args["output"] = format_model_suffix(
+            dict_args["output"], preferred_backend=args.backend, strict_prefer=True
+        )
         compress(**dict_args)
     elif args.command == "convert-from":
         convert(**dict_args)

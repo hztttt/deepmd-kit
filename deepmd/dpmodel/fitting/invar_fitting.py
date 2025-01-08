@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Any,
+    NoReturn,
     Optional,
     Union,
 )
@@ -10,6 +10,9 @@ import numpy as np
 
 from deepmd.dpmodel import (
     DEFAULT_PRECISION,
+)
+from deepmd.dpmodel.common import (
+    cast_precision,
 )
 from deepmd.dpmodel.output_def import (
     FittingOutputDef,
@@ -28,7 +31,7 @@ from .general_fitting import (
 @GeneralFitting.register("invar")
 @fitting_check_output
 class InvarFitting(GeneralFitting):
-    r"""Fitting the energy (or a rotationally invariant porperty of `dim_out`) of the system. The force and the virial can also be trained.
+    r"""Fitting the energy (or a rotationally invariant property of `dim_out`) of the system. The force and the virial can also be trained.
 
     Lets take the energy fitting task as an example.
     The potential energy :math:`E` is a fitting network function of the descriptor :math:`\mathcal{D}`:
@@ -90,7 +93,7 @@ class InvarFitting(GeneralFitting):
             Suppose that we have :math:`N_l` hidden layers in the fitting net,
             this list is of length :math:`N_l + 1`, specifying if the hidden layers and the output layer are trainable.
     atom_ener
-            Specifying atomic energy contribution in vacuum. The `set_davg_zero` key in the descrptor should be set.
+            Specifying atomic energy contribution in vacuum. The `set_davg_zero` key in the descriptor should be set.
     activation_function
             The activation function :math:`\boldsymbol{\phi}` in the embedding net. Supported options are |ACTIVATION_FN|
     precision
@@ -134,15 +137,11 @@ class InvarFitting(GeneralFitting):
         exclude_types: list[int] = [],
         type_map: Optional[list[str]] = None,
         seed: Optional[Union[int, list[int]]] = None,
-    ):
+    ) -> None:
         if tot_ener_zero:
             raise NotImplementedError("tot_ener_zero is not implemented")
         if spin is not None:
             raise NotImplementedError("spin is not implemented")
-        if use_aparam_as_mask:
-            raise NotImplementedError("use_aparam_as_mask is not implemented")
-        if use_aparam_as_mask:
-            raise NotImplementedError("use_aparam_as_mask is not implemented")
         if layer_name is not None:
             raise NotImplementedError("layer_name is not implemented")
 
@@ -183,7 +182,7 @@ class InvarFitting(GeneralFitting):
 
     @classmethod
     def deserialize(cls, data: dict) -> "GeneralFitting":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         return super().deserialize(data)
 
@@ -191,7 +190,7 @@ class InvarFitting(GeneralFitting):
         """Set the FittingNet output dim."""
         return self.dim_out
 
-    def compute_output_stats(self, merged):
+    def compute_output_stats(self, merged) -> NoReturn:
         """Update the output bias for fitting net."""
         raise NotImplementedError
 
@@ -208,6 +207,7 @@ class InvarFitting(GeneralFitting):
             ]
         )
 
+    @cast_precision
     def call(
         self,
         descriptor: np.ndarray,

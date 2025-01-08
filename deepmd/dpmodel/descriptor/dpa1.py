@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
+import math
 from typing import (
     Any,
     Callable,
+    NoReturn,
     Optional,
     Union,
 )
@@ -17,6 +19,10 @@ from deepmd.dpmodel import (
 from deepmd.dpmodel.array_api import (
     xp_take_along_axis,
 )
+from deepmd.dpmodel.common import (
+    cast_precision,
+    to_numpy_array,
+)
 from deepmd.dpmodel.utils import (
     EmbeddingNet,
     EnvMat,
@@ -26,6 +32,9 @@ from deepmd.dpmodel.utils import (
 from deepmd.dpmodel.utils.network import (
     LayerNorm,
     NativeLayer,
+)
+from deepmd.dpmodel.utils.safe_gradient import (
+    safe_for_vector_norm,
 )
 from deepmd.dpmodel.utils.seed import (
     child_seed,
@@ -322,6 +331,7 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         self.tebd_dim = tebd_dim
         self.concat_output_tebd = concat_output_tebd
         self.trainable = trainable
+        self.precision = precision
 
     def get_rcut(self) -> float:
         """Returns the cut-off radius."""
@@ -358,11 +368,11 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         return self.se_atten.dim_emb
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -381,11 +391,11 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         """Returns the protection of building environment matrix."""
         return self.se_atten.get_env_protection()
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> NoReturn:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         raise NotImplementedError
 
@@ -397,7 +407,9 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
     def dim_emb(self):
         return self.get_dim_emb()
 
-    def compute_input_stats(self, merged: list[dict], path: Optional[DPPath] = None):
+    def compute_input_stats(
+        self, merged: list[dict], path: Optional[DPPath] = None
+    ) -> NoReturn:
         """Update mean and stddev for descriptor elements."""
         raise NotImplementedError
 
@@ -441,6 +453,7 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         obj["davg"] = obj["davg"][remap_index]
         obj["dstd"] = obj["dstd"][remap_index]
 
+    @cast_precision
     def call(
         self,
         coord_ext,
@@ -459,7 +472,7 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         nlist
             The neighbor list. shape: nf x nloc x nnei
         mapping
-            The index mapping from extended to lcoal region. not used by this descriptor.
+            The index mapping from extended to local region. not used by this descriptor.
 
         Returns
         -------
@@ -481,9 +494,10 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         xp = array_api_compat.array_namespace(coord_ext, atype_ext, nlist)
         nf, nloc, nnei = nlist.shape
         nall = xp.reshape(coord_ext, (nf, -1)).shape[1] // 3
+        type_embedding = self.type_embedding.call()
         # nf x nall x tebd_dim
         atype_embd_ext = xp.reshape(
-            xp.take(self.type_embedding.call(), xp.reshape(atype_ext, [-1]), axis=0),
+            xp.take(type_embedding, xp.reshape(atype_ext, [-1]), axis=0),
             (nf, nall, self.tebd_dim),
         )
         # nfnl x tebd_dim
@@ -494,6 +508,7 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
             atype_ext,
             atype_embd_ext,
             mapping=None,
+            type_embedding=type_embedding,
         )
         # nf x nloc x (ng x ng1 + tebd_dim)
         if self.concat_output_tebd:
@@ -544,8 +559,8 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
             "exclude_types": obj.exclude_types,
             "env_protection": obj.env_protection,
             "@variables": {
-                "davg": np.array(obj["davg"]),
-                "dstd": np.array(obj["dstd"]),
+                "davg": to_numpy_array(obj["davg"]),
+                "dstd": to_numpy_array(obj["dstd"]),
             },
             ## to be updated when the options are supported.
             "trainable": self.trainable,
@@ -602,7 +617,7 @@ class DescrptDPA1(NativeOP, BaseDescriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
@@ -776,7 +791,7 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         """Returns the output dimension of embedding."""
         return self.filter_neuron[-1]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ("avg", "data_avg", "davg"):
             self.mean = value
         elif key in ("std", "data_std", "dstd"):
@@ -793,11 +808,11 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
             raise KeyError(key)
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -827,18 +842,18 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         path: Optional[DPPath] = None,
-    ):
+    ) -> NoReturn:
         """Compute the input statistics (e.g. mean and stddev) for the descriptors from packed data."""
         raise NotImplementedError
 
-    def get_stats(self):
+    def get_stats(self) -> NoReturn:
         """Get the statistics of the descriptor."""
         raise NotImplementedError
 
     def reinit_exclude(
         self,
         exclude_types: list[tuple[int, int]] = [],
-    ):
+    ) -> None:
         self.exclude_types = exclude_types
         self.emask = PairExcludeMask(self.ntypes, exclude_types=exclude_types)
 
@@ -849,7 +864,7 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
     ):
         xp = array_api_compat.array_namespace(ss)
         nfnl, nnei = ss.shape[0:2]
-        shape2 = xp.prod(xp.asarray(ss.shape[2:]))
+        shape2 = math.prod(ss.shape[2:])
         ss = xp.reshape(ss, (nfnl, nnei, shape2))
         # nfnl x nnei x ng
         gg = self.embeddings[embedding_idx].call(ss)
@@ -861,10 +876,6 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         embedding_idx,
     ):
         assert self.embeddings_strip is not None
-        xp = array_api_compat.array_namespace(ss)
-        nfnl, nnei = ss.shape[0:2]
-        shape2 = xp.prod(xp.asarray(ss.shape[2:]))
-        ss = xp.reshape(ss, (nfnl, nnei, shape2))
         # nfnl x nnei x ng
         gg = self.embeddings_strip[embedding_idx].call(ss)
         return gg
@@ -876,6 +887,7 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         atype_ext: np.ndarray,
         atype_embd_ext: Optional[np.ndarray] = None,
         mapping: Optional[np.ndarray] = None,
+        type_embedding: Optional[np.ndarray] = None,
     ):
         xp = array_api_compat.array_namespace(nlist, coord_ext, atype_ext)
         # nf x nloc x nnei x 4
@@ -883,6 +895,7 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
             coord_ext, atype_ext, nlist, self.mean, self.stddev
         )
         nf, nloc, nnei, _ = dmatrix.shape
+        atype = atype_ext[:, :nloc]
         exclude_mask = self.emask.build_type_exclude_mask(nlist, atype_ext)
         # nfnl x nnei
         exclude_mask = xp.reshape(exclude_mask, (nf * nloc, nnei))
@@ -893,28 +906,33 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         dmatrix = xp.reshape(dmatrix, (nf * nloc, nnei, 4))
         # nfnl x nnei x 1
         sw = xp.reshape(sw, (nf * nloc, nnei, 1))
-        # nfnl x tebd_dim
-        atype_embd = xp.reshape(atype_embd_ext[:, :nloc, :], (nf * nloc, self.tebd_dim))
-        # nfnl x nnei x tebd_dim
-        atype_embd_nnei = xp.tile(atype_embd[:, xp.newaxis, :], (1, nnei, 1))
         # nfnl x nnei
         nlist_mask = nlist != -1
         # nfnl x nnei x 1
         sw = xp.where(nlist_mask[:, :, None], sw, xp.full_like(sw, 0.0))
         nlist_masked = xp.where(nlist_mask, nlist, xp.zeros_like(nlist))
-        index = xp.tile(xp.reshape(nlist_masked, (nf, -1, 1)), (1, 1, self.tebd_dim))
-        # nfnl x nnei x tebd_dim
-        atype_embd_nlist = xp_take_along_axis(atype_embd_ext, index, axis=1)
-        atype_embd_nlist = xp.reshape(
-            atype_embd_nlist, (nf * nloc, nnei, self.tebd_dim)
-        )
         ng = self.neuron[-1]
+        nt = self.tebd_dim
         # nfnl x nnei x 4
         rr = xp.reshape(dmatrix, (nf * nloc, nnei, 4))
         rr = rr * xp.astype(exclude_mask[:, :, None], rr.dtype)
         # nfnl x nnei x 1
         ss = rr[..., 0:1]
         if self.tebd_input_mode in ["concat"]:
+            # nfnl x tebd_dim
+            atype_embd = xp.reshape(
+                atype_embd_ext[:, :nloc, :], (nf * nloc, self.tebd_dim)
+            )
+            # nfnl x nnei x tebd_dim
+            atype_embd_nnei = xp.tile(atype_embd[:, xp.newaxis, :], (1, nnei, 1))
+            index = xp.tile(
+                xp.reshape(nlist_masked, (nf, -1, 1)), (1, 1, self.tebd_dim)
+            )
+            # nfnl x nnei x tebd_dim
+            atype_embd_nlist = xp_take_along_axis(atype_embd_ext, index, axis=1)
+            atype_embd_nlist = xp.reshape(
+                atype_embd_nlist, (nf * nloc, nnei, self.tebd_dim)
+            )
             if not self.type_one_side:
                 # nfnl x nnei x (1 + 2 * tebd_dim)
                 ss = xp.concat([ss, atype_embd_nlist, atype_embd_nnei], axis=-1)
@@ -928,14 +946,48 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
             # nfnl x nnei x ng
             gg_s = self.cal_g(ss, 0)
             assert self.embeddings_strip is not None
-            if not self.type_one_side:
-                # nfnl x nnei x (tebd_dim * 2)
-                tt = xp.concat([atype_embd_nlist, atype_embd_nnei], axis=-1)
+            assert type_embedding is not None
+            ntypes_with_padding = type_embedding.shape[0]
+            # nf x (nl x nnei)
+            nlist_index = xp.reshape(nlist_masked, (nf, nloc * nnei))
+            # nf x (nl x nnei)
+            nei_type = xp_take_along_axis(atype_ext, nlist_index, axis=1)
+            # (nf x nl x nnei) x ng
+            nei_type_index = xp.tile(xp.reshape(nei_type, (-1, 1)), (1, ng))
+            if self.type_one_side:
+                tt_full = self.cal_g_strip(type_embedding, 0)
+                # (nf x nl x nnei) x ng
+                gg_t = xp_take_along_axis(tt_full, nei_type_index, axis=0)
             else:
-                # nfnl x nnei x tebd_dim
-                tt = atype_embd_nlist
-            # nfnl x nnei x ng
-            gg_t = self.cal_g_strip(tt, 0)
+                idx_i = xp.reshape(
+                    xp.tile(
+                        (xp.reshape(atype, (-1, 1)) * ntypes_with_padding), (1, nnei)
+                    ),
+                    (-1),
+                )
+                idx_j = xp.reshape(nei_type, (-1,))
+                # (nf x nl x nnei) x ng
+                idx = xp.tile(xp.reshape((idx_i + idx_j), (-1, 1)), (1, ng))
+                # (ntypes) * ntypes * nt
+                type_embedding_nei = xp.tile(
+                    xp.reshape(type_embedding, (1, ntypes_with_padding, nt)),
+                    (ntypes_with_padding, 1, 1),
+                )
+                # ntypes * (ntypes) * nt
+                type_embedding_center = xp.tile(
+                    xp.reshape(type_embedding, (ntypes_with_padding, 1, nt)),
+                    (1, ntypes_with_padding, 1),
+                )
+                # (ntypes * ntypes) * (nt+nt)
+                two_side_type_embedding = xp.reshape(
+                    xp.concat([type_embedding_nei, type_embedding_center], axis=-1),
+                    (-1, nt * 2),
+                )
+                tt_full = self.cal_g_strip(two_side_type_embedding, 0)
+                # (nf x nl x nnei) x ng
+                gg_t = xp_take_along_axis(tt_full, idx, axis=0)
+            # (nf x nl) x nnei x ng
+            gg_t = xp.reshape(gg_t, (nf * nloc, nnei, ng))
             if self.smooth:
                 gg_t = gg_t * xp.reshape(sw, (-1, self.nnei, 1))
             # nfnl x nnei x ng
@@ -943,7 +995,7 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
         else:
             raise NotImplementedError
 
-        normed = xp.linalg.vector_norm(
+        normed = safe_for_vector_norm(
             xp.reshape(rr, (-1, nnei, 4))[:, :, 1:4], axis=-1, keepdims=True
         )
         input_r = xp.reshape(rr, (-1, nnei, 4))[:, :, 1:4] / xp.maximum(
@@ -1018,8 +1070,8 @@ class DescrptBlockSeAtten(NativeOP, DescriptorBlock):
             "exclude_types": obj.exclude_types,
             "env_protection": obj.env_protection,
             "@variables": {
-                "davg": np.array(obj["davg"]),
-                "dstd": np.array(obj["dstd"]),
+                "davg": to_numpy_array(obj["davg"]),
+                "dstd": to_numpy_array(obj["dstd"]),
             },
         }
         if obj.tebd_input_mode in ["strip"]:
@@ -1070,7 +1122,7 @@ class NeighborGatedAttention(NativeOP):
         smooth: bool = True,
         precision: str = DEFAULT_PRECISION,
         seed: Optional[Union[int, list[int]]] = None,
-    ):
+    ) -> None:
         """Construct a neighbor-wise attention net."""
         super().__init__()
         self.layer_num = layer_num
@@ -1125,7 +1177,7 @@ class NeighborGatedAttention(NativeOP):
         else:
             raise TypeError(key)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if not isinstance(key, int):
             raise TypeError(key)
         if isinstance(value, self.network_type):
@@ -1198,7 +1250,7 @@ class NeighborGatedAttentionLayer(NativeOP):
         smooth: bool = True,
         precision: str = DEFAULT_PRECISION,
         seed: Optional[Union[int, list[int]]] = None,
-    ):
+    ) -> None:
         """Construct a neighbor-wise attention layer."""
         super().__init__()
         self.nnei = nnei
@@ -1304,7 +1356,7 @@ class GatedAttentionLayer(NativeOP):
         smooth: bool = True,
         precision: str = DEFAULT_PRECISION,
         seed: Optional[Union[int, list[int]]] = None,
-    ):
+    ) -> None:
         """Construct a multi-head neighbor-wise attention net."""
         super().__init__()
         assert hidden_dim % num_heads == 0, "hidden_dim must be divisible by num_heads"

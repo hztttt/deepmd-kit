@@ -61,7 +61,7 @@ class EnvMatStat(BaseEnvMatStat):
 
 
 class EnvMatStatSe(EnvMatStat):
-    """Environmental matrix statistics for the se_a/se_r environemntal matrix.
+    """Environmental matrix statistics for the se_a/se_r environmental matrix.
 
     Parameters
     ----------
@@ -69,7 +69,7 @@ class EnvMatStatSe(EnvMatStat):
         The descriptor of the model.
     """
 
-    def __init__(self, descriptor: "DescriptorBlock"):
+    def __init__(self, descriptor: "DescriptorBlock") -> None:
         super().__init__()
         self.descriptor = descriptor
         self.last_dim = (

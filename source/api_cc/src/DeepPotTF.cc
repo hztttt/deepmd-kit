@@ -465,10 +465,10 @@ void DeepPotTF::init(const std::string& model,
   }
   if (!model_compatable(model_version)) {
     throw deepmd::deepmd_exception(
-        "incompatable model: version " + model_version +
+        "incompatible model: version " + model_version +
         " in graph, but version " + global_model_version +
         " supported "
-        "See https://deepmd.rtfd.io/compatability/ for details.");
+        "See https://deepmd.rtfd.io/compatibility/ for details.");
   }
   dtype = session_get_dtype(session, "descrpt_attr/rcut");
   if (dtype == tensorflow::DT_DOUBLE) {
@@ -478,11 +478,7 @@ void DeepPotTF::init(const std::string& model,
   }
   cell_size = rcut;
   ntypes = get_scalar<int>("descrpt_attr/ntypes");
-  try {
-    ntypes_spin = get_scalar<int>("spin_attr/ntypes_spin");
-  } catch (const deepmd::deepmd_exception&) {
-    ntypes_spin = 0;
-  }
+  ntypes_spin = 0;
   dfparam = get_scalar<int>("fitting_attr/dfparam");
   daparam = get_scalar<int>("fitting_attr/daparam");
   if (dfparam < 0) {

@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Optional,
     Union,
@@ -20,7 +19,7 @@ from deepmd.utils.version import (
 
 @InvarFitting.register("property")
 class PropertyFittingNet(InvarFitting):
-    r"""Fitting the rotationally invariant porperties of `task_dim` of the system.
+    r"""Fitting the rotationally invariant properties of `task_dim` of the system.
 
     Parameters
     ----------
@@ -86,7 +85,7 @@ class PropertyFittingNet(InvarFitting):
         type_map: Optional[list[str]] = None,
         # not used
         seed: Optional[int] = None,
-    ):
+    ) -> None:
         self.task_dim = task_dim
         self.intensive = intensive
         self.bias_method = bias_method
@@ -111,7 +110,7 @@ class PropertyFittingNet(InvarFitting):
 
     @classmethod
     def deserialize(cls, data: dict) -> "PropertyFittingNet":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version"), 2, 1)
         data.pop("dim_out")
         data.pop("var_name")

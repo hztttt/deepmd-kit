@@ -1,17 +1,23 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Any,
+    NoReturn,
     Optional,
     Union,
 )
 
+import array_api_compat
 import numpy as np
 
 from deepmd.dpmodel import (
     DEFAULT_PRECISION,
     PRECISION_DICT,
     NativeOP,
+)
+from deepmd.dpmodel.common import (
+    cast_precision,
+    get_xp_precision,
+    to_numpy_array,
 )
 from deepmd.dpmodel.utils import (
     EmbeddingNet,
@@ -24,9 +30,6 @@ from deepmd.dpmodel.utils.seed import (
 )
 from deepmd.dpmodel.utils.update_sel import (
     UpdateSel,
-)
-from deepmd.env import (
-    GLOBAL_NP_FLOAT_PRECISION,
 )
 from deepmd.utils.data_system import (
     DeepmdDataSystem,
@@ -46,7 +49,7 @@ from .base_descriptor import (
 @BaseDescriptor.register("se_e2_r")
 @BaseDescriptor.register("se_r")
 class DescrptSeR(NativeOP, BaseDescriptor):
-    r"""DeepPot-SE_R constructed from only the radial imformation of atomic configurations.
+    r"""DeepPot-SE_R constructed from only the radial information of atomic configurations.
 
 
     Parameters
@@ -144,7 +147,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         self.env_protection = env_protection
 
         in_dim = 1  # not considiering type embedding
-        self.embeddings = NetworkCollection(
+        embeddings = NetworkCollection(
             ntypes=self.ntypes,
             ndim=(1 if self.type_one_side else 2),
             network_type="embedding_network",
@@ -152,7 +155,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         if not self.type_one_side:
             raise NotImplementedError("type_one_side == False not implemented")
         for ii in range(self.ntypes):
-            self.embeddings[(ii,)] = EmbeddingNet(
+            embeddings[(ii,)] = EmbeddingNet(
                 in_dim,
                 self.neuron,
                 self.activation_function,
@@ -160,8 +163,9 @@ class DescrptSeR(NativeOP, BaseDescriptor):
                 self.precision,
                 seed=child_seed(seed, ii),
             )
+        self.embeddings = embeddings
         self.env_mat = EnvMat(self.rcut, self.rcut_smth, protection=self.env_protection)
-        self.nnei = np.sum(self.sel)
+        self.nnei = np.sum(self.sel).item()
         self.davg = np.zeros(
             [self.ntypes, self.nnei, 1], dtype=PRECISION_DICT[self.precision]
         )
@@ -169,8 +173,9 @@ class DescrptSeR(NativeOP, BaseDescriptor):
             [self.ntypes, self.nnei, 1], dtype=PRECISION_DICT[self.precision]
         )
         self.orig_sel = self.sel
+        self.sel_cumsum = [0, *np.cumsum(self.sel).tolist()]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ("avg", "data_avg", "davg"):
             self.davg = value
         elif key in ("std", "data_std", "dstd"):
@@ -195,7 +200,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         """Returns the output dimension of this descriptor."""
         return self.neuron[-1]
 
-    def get_dim_emb(self):
+    def get_dim_emb(self) -> NoReturn:
         """Returns the embedding (g2) dimension of this descriptor."""
         raise NotImplementedError
 
@@ -211,7 +216,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         """Returns cutoff radius."""
         return self.sel
 
-    def mixed_types(self):
+    def mixed_types(self) -> bool:
         """Returns if the descriptor requires a neighbor list that distinguish different
         atomic types or not.
         """
@@ -229,11 +234,11 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         """Returns the protection of building environment matrix."""
         return self.env_protection
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> NoReturn:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         raise NotImplementedError
 
@@ -257,7 +262,9 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         """Get the name to each type of atoms."""
         return self.type_map
 
-    def compute_input_stats(self, merged: list[dict], path: Optional[DPPath] = None):
+    def compute_input_stats(
+        self, merged: list[dict], path: Optional[DPPath] = None
+    ) -> NoReturn:
         """Update mean and stddev for descriptor elements."""
         raise NotImplementedError
 
@@ -279,12 +286,14 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         ss,
         ll,
     ):
+        xp = array_api_compat.array_namespace(ss)
         nf, nloc, nnei = ss.shape[0:3]
-        ss = ss.reshape(nf, nloc, nnei, 1)
+        ss = xp.reshape(ss, (nf, nloc, nnei, 1))
         # nf x nloc x nnei x ng
         gg = self.embeddings[(ll,)].call(ss)
         return gg
 
+    @cast_precision
     def call(
         self,
         coord_ext,
@@ -303,7 +312,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         nlist
             The neighbor list. shape: nf x nloc x nnei
         mapping
-            The index mapping from extended to lcoal region. not used by this descriptor.
+            The index mapping from extended to local region. not used by this descriptor.
 
         Returns
         -------
@@ -321,29 +330,33 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         sw
             The smooth switch function.
         """
+        xp = array_api_compat.array_namespace(coord_ext)
         del mapping
         # nf x nloc x nnei x 1
         rr, diff, ww = self.env_mat.call(
             coord_ext, atype_ext, nlist, self.davg, self.dstd, True
         )
         nf, nloc, nnei, _ = rr.shape
-        sec = np.append([0], np.cumsum(self.sel))
+        sec = self.sel_cumsum
 
         ng = self.neuron[-1]
-        xyz_scatter = np.zeros([nf, nloc, ng], dtype=PRECISION_DICT[self.precision])
+        xyz_scatter = xp.zeros(
+            [nf, nloc, ng], dtype=get_xp_precision(xp, self.precision)
+        )
         exclude_mask = self.emask.build_type_exclude_mask(nlist, atype_ext)
+        rr = xp.astype(rr, xyz_scatter.dtype)
         for tt in range(self.ntypes):
             mm = exclude_mask[:, :, sec[tt] : sec[tt + 1]]
             tr = rr[:, :, sec[tt] : sec[tt + 1], :]
-            tr = tr * mm[:, :, :, None]
+            tr = tr * xp.astype(mm[:, :, :, None], tr.dtype)
             gg = self.cal_g(tr, tt)
-            gg = np.mean(gg, axis=2)
+            gg = xp.mean(gg, axis=2)
             # nf x nloc x ng x 1
             xyz_scatter += gg * (self.sel[tt] / self.nnei)
 
         res_rescale = 1.0 / 5.0
         res = xyz_scatter * res_rescale
-        res = res.reshape(nf, nloc, ng).astype(GLOBAL_NP_FLOAT_PRECISION)
+        res = xp.reshape(res, (nf, nloc, ng))
         return res, None, None, None, ww
 
     def serialize(self) -> dict:
@@ -369,8 +382,8 @@ class DescrptSeR(NativeOP, BaseDescriptor):
             "env_mat": self.env_mat.serialize(),
             "embeddings": self.embeddings.serialize(),
             "@variables": {
-                "davg": self.davg,
-                "dstd": self.dstd,
+                "davg": to_numpy_array(self.davg),
+                "dstd": to_numpy_array(self.dstd),
             },
             "type_map": self.type_map,
         }
@@ -378,7 +391,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
     @classmethod
     def deserialize(cls, data: dict) -> "DescrptSeR":
         """Deserialize from dict."""
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         data.pop("@class", None)
         data.pop("type", None)
@@ -404,7 +417,7 @@ class DescrptSeR(NativeOP, BaseDescriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict

@@ -1,13 +1,22 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 from typing import (
+    NoReturn,
     Optional,
     Union,
 )
 
+import array_api_compat
 import numpy as np
 
 from deepmd.dpmodel import (
     NativeOP,
+)
+from deepmd.dpmodel.array_api import (
+    xp_take_along_axis,
+)
+from deepmd.dpmodel.common import (
+    cast_precision,
+    to_numpy_array,
 )
 from deepmd.dpmodel.utils import (
     EnvMat,
@@ -81,7 +90,7 @@ class RepinitArgs:
         three_body_sel: int = 40,
         three_body_rcut: float = 4.0,
         three_body_rcut_smth: float = 0.5,
-    ):
+    ) -> None:
         r"""The constructor for the RepinitArgs class which defines the parameters of the repinit block in DPA2 descriptor.
 
         Parameters
@@ -205,7 +214,7 @@ class RepformerArgs:
         g1_out_conv: bool = True,
         g1_out_mlp: bool = True,
         ln_eps: Optional[float] = 1e-5,
-    ):
+    ) -> None:
         r"""The constructor for the RepformerArgs class which defines the parameters of the repformer block in DPA2 descriptor.
 
         Parameters
@@ -377,8 +386,8 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         use_econf_tebd: bool = False,
         use_tebd_bias: bool = False,
         type_map: Optional[list[str]] = None,
-    ):
-        r"""The DPA-2 descriptor. see https://arxiv.org/abs/2312.15492.
+    ) -> None:
+        r"""The DPA-2 descriptor[1]_.
 
         Parameters
         ----------
@@ -425,6 +434,11 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         sw:                 torch.Tensor
             The switch function for decaying inverse distance.
 
+        References
+        ----------
+        .. [1] Zhang, D., Liu, X., Zhang, X. et al. DPA-2: a
+           large atomic model as a multi-task learner. npj
+           Comput Mater 10, 293 (2024). https://doi.org/10.1038/s41524-024-01493-2
         """
 
         def init_subclass_params(sub_data, sub_class):
@@ -587,6 +601,7 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         self.rcut = self.repinit.get_rcut()
         self.ntypes = ntypes
         self.sel = self.repinit.sel
+        self.precision = precision
 
     def get_rcut(self) -> float:
         """Returns the cut-off radius."""
@@ -624,11 +639,11 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         return self.repformers.dim_emb
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -649,11 +664,11 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         """Returns the protection of building environment matrix."""
         return self.env_protection
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> NoReturn:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         raise NotImplementedError
 
@@ -721,7 +736,9 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         """Returns the embedding dimension g2."""
         return self.get_dim_emb()
 
-    def compute_input_stats(self, merged: list[dict], path: Optional[DPPath] = None):
+    def compute_input_stats(
+        self, merged: list[dict], path: Optional[DPPath] = None
+    ) -> NoReturn:
         """Update mean and stddev for descriptor elements."""
         raise NotImplementedError
 
@@ -750,6 +767,7 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             stddev_list.append(self.repinit_three_body.stddev)
         return mean_list, stddev_list
 
+    @cast_precision
     def call(
         self,
         coord_ext: np.ndarray,
@@ -787,9 +805,10 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             The smooth switch function. shape: nf x nloc x nnei
 
         """
+        xp = array_api_compat.array_namespace(coord_ext, atype_ext, nlist)
         use_three_body = self.use_three_body
         nframes, nloc, nnei = nlist.shape
-        nall = coord_ext.reshape(nframes, -1).shape[1] // 3
+        nall = xp.reshape(coord_ext, (nframes, -1)).shape[1] // 3
         # nlists
         nlist_dict = build_multiple_neighbor_list(
             coord_ext,
@@ -797,8 +816,12 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             self.rcut_list,
             self.nsel_list,
         )
+        type_embedding = self.type_embedding.call()
         # repinit
-        g1_ext = self.type_embedding.call()[atype_ext]
+        g1_ext = xp.reshape(
+            xp.take(type_embedding, xp.reshape(atype_ext, [-1]), axis=0),
+            (nframes, nall, self.tebd_dim),
+        )
         g1_inp = g1_ext[:, :nloc, :]
         g1, _, _, _, _ = self.repinit(
             nlist_dict[
@@ -808,6 +831,7 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             atype_ext,
             g1_ext,
             mapping,
+            type_embedding=type_embedding,
         )
         if use_three_body:
             assert self.repinit_three_body is not None
@@ -822,8 +846,9 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
                 atype_ext,
                 g1_ext,
                 mapping,
+                type_embedding=type_embedding,
             )
-            g1 = np.concatenate([g1, g1_three_body], axis=-1)
+            g1 = xp.concat([g1, g1_three_body], axis=-1)
         # linear to change shape
         g1 = self.g1_shape_tranform(g1)
         if self.add_tebd_to_repinit_out:
@@ -831,8 +856,10 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             g1 = g1 + self.tebd_transform(g1_inp)
         # mapping g1
         assert mapping is not None
-        mapping_ext = np.tile(mapping.reshape(nframes, nall, 1), (1, 1, g1.shape[-1]))
-        g1_ext = np.take_along_axis(g1, mapping_ext, axis=1)
+        mapping_ext = xp.tile(
+            xp.reshape(mapping, (nframes, nall, 1)), (1, 1, g1.shape[-1])
+        )
+        g1_ext = xp_take_along_axis(g1, mapping_ext, axis=1)
         # repformer
         g1, g2, h2, rot_mat, sw = self.repformers(
             nlist_dict[
@@ -846,7 +873,7 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             mapping,
         )
         if self.concat_output_tebd:
-            g1 = np.concatenate([g1, g1_inp], axis=-1)
+            g1 = xp.concat([g1, g1_inp], axis=-1)
         return g1, rot_mat, g2, h2, sw
 
     def serialize(self) -> dict:
@@ -883,8 +910,8 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             "embeddings": repinit.embeddings.serialize(),
             "env_mat": EnvMat(repinit.rcut, repinit.rcut_smth).serialize(),
             "@variables": {
-                "davg": repinit["davg"],
-                "dstd": repinit["dstd"],
+                "davg": to_numpy_array(repinit["davg"]),
+                "dstd": to_numpy_array(repinit["dstd"]),
             },
         }
         if repinit.tebd_input_mode in ["strip"]:
@@ -896,8 +923,8 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             "repformer_layers": [layer.serialize() for layer in repformers.layers],
             "env_mat": EnvMat(repformers.rcut, repformers.rcut_smth).serialize(),
             "@variables": {
-                "davg": repformers["davg"],
-                "dstd": repformers["dstd"],
+                "davg": to_numpy_array(repformers["davg"]),
+                "dstd": to_numpy_array(repformers["dstd"]),
             },
         }
         data.update(
@@ -913,8 +940,8 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
                     repinit_three_body.rcut, repinit_three_body.rcut_smth
                 ).serialize(),
                 "@variables": {
-                    "davg": repinit_three_body["davg"],
-                    "dstd": repinit_three_body["dstd"],
+                    "davg": to_numpy_array(repinit_three_body["davg"]),
+                    "dstd": to_numpy_array(repinit_three_body["dstd"]),
                 },
             }
             if repinit_three_body.tebd_input_mode in ["strip"]:
@@ -1021,7 +1048,7 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
@@ -1044,6 +1071,14 @@ class DescrptDPA2(NativeOP, BaseDescriptor):
             True,
         )
         local_jdata_cpy["repinit"]["nsel"] = repinit_sel[0]
+        min_nbor_dist, repinit_three_body_sel = update_sel.update_one_sel(
+            train_data,
+            type_map,
+            local_jdata_cpy["repinit"]["three_body_rcut"],
+            local_jdata_cpy["repinit"]["three_body_sel"],
+            True,
+        )
+        local_jdata_cpy["repinit"]["three_body_sel"] = repinit_three_body_sel[0]
         min_nbor_dist, repformer_sel = update_sel.update_one_sel(
             train_data,
             type_map,

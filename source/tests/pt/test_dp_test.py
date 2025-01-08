@@ -30,7 +30,7 @@ from .model.test_permutation import (
 
 
 class DPTest:
-    def test_dp_test_1_frame(self):
+    def test_dp_test_1_frame(self) -> None:
         trainer = get_trainer(deepcopy(self.config))
         with torch.device("cpu"):
             input_dict, label_dict, _ = trainer.get_data(is_train=False)
@@ -93,7 +93,7 @@ class DPTest:
                 ).reshape(-1, 3),
             )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for f in os.listdir("."):
             if f.startswith("model") and f.endswith(".pt"):
                 os.remove(f)
@@ -106,7 +106,7 @@ class DPTest:
 
 
 class TestDPTestSeA(DPTest, unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.detail_file = "test_dp_test_ener_detail"
         input_json = str(Path(__file__).parent / "water/se_atten.json")
         with open(input_json) as f:
@@ -123,7 +123,7 @@ class TestDPTestSeA(DPTest, unittest.TestCase):
 
 
 class TestDPTestSeASpin(DPTest, unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.detail_file = "test_dp_test_ener_spin_detail"
         input_json = str(Path(__file__).parent / "water/se_atten.json")
         with open(input_json) as f:
@@ -141,7 +141,7 @@ class TestDPTestSeASpin(DPTest, unittest.TestCase):
 
 
 class TestDPTestPropertySeA(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.detail_file = "test_dp_test_property_detail"
         input_json = str(Path(__file__).parent / "property/input.json")
         with open(input_json) as f:
@@ -152,11 +152,14 @@ class TestDPTestPropertySeA(unittest.TestCase):
         self.config["training"]["training_data"]["systems"] = data_file
         self.config["training"]["validation_data"]["systems"] = data_file
         self.config["model"] = deepcopy(model_property)
+        self.config["model"]["type_map"] = [
+            self.config["model"]["type_map"][i] for i in [1, 0, 3, 2]
+        ]
         self.input_json = "test_dp_test_property.json"
         with open(self.input_json, "w") as fp:
             json.dump(self.config, fp, indent=4)
 
-    def test_dp_test_1_frame(self):
+    def test_dp_test_1_frame(self) -> None:
         trainer = get_trainer(deepcopy(self.config))
         with torch.device("cpu"):
             input_dict, label_dict, _ = trainer.get_data(is_train=False)
@@ -183,7 +186,7 @@ class TestDPTestPropertySeA(unittest.TestCase):
             to_numpy_array(result["property"])[0],
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for f in os.listdir("."):
             if f.startswith("model") and f.endswith(".pt"):
                 os.remove(f)

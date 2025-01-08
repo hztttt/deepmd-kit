@@ -56,7 +56,7 @@ class EnerModel(StandardModel):
     use_srtab
             The table for the short-range pairwise interaction added on top of DP. The table is a text data file with (N_t + 1) * N_t / 2 + 1 columes. The first colume is the distance between atoms. The second to the last columes are energies for pairs of certain types. For example we have two atom types, 0 and 1. The columes from 2nd to 4th are for 0-0, 0-1 and 1-1 correspondingly.
     smin_alpha
-            The short-range tabulated interaction will be swithed according to the distance of the nearest neighbor. This distance is calculated by softmin. This parameter is the decaying parameter in the softmin. It is only required when `use_srtab` is provided.
+            The short-range tabulated interaction will be switched according to the distance of the nearest neighbor. This distance is calculated by softmin. This parameter is the decaying parameter in the softmin. It is only required when `use_srtab` is provided.
     sw_rmin
             The lower boundary of the interpolation between short-range tabulated interaction and DP. It is only required when `use_srtab` is provided.
     sw_rmin
@@ -135,7 +135,7 @@ class EnerModel(StandardModel):
         """Get the number of atomic parameters."""
         return self.numb_aparam
 
-    def data_stat(self, data):
+    def data_stat(self, data) -> None:
         all_stat = make_stat_input(data, self.data_stat_nbatch, merge_sys=False)
         m_all_stat = merge_sys_stat(all_stat)
         self._compute_input_stat(
@@ -144,7 +144,7 @@ class EnerModel(StandardModel):
         self._compute_output_stat(all_stat, mixed_type=data.mixed_type)
         # self.bias_atom_e = data.compute_energy_shift(self.rcond)
 
-    def _compute_input_stat(self, all_stat, protection=1e-2, mixed_type=False):
+    def _compute_input_stat(self, all_stat, protection=1e-2, mixed_type=False) -> None:
         if mixed_type:
             self.descrpt.compute_input_stats(
                 all_stat["coord"],
@@ -167,7 +167,7 @@ class EnerModel(StandardModel):
             )
         self.fitting.compute_input_stats(all_stat, protection=protection)
 
-    def _compute_output_stat(self, all_stat, mixed_type=False):
+    def _compute_output_stat(self, all_stat, mixed_type=False) -> None:
         if mixed_type:
             self.fitting.compute_output_stats(all_stat, mixed_type=mixed_type)
         else:
@@ -516,7 +516,7 @@ class EnerModel(StandardModel):
         bias_adjust_mode : str
             The mode for changing energy bias : ['change-by-statistic', 'set-by-statistic']
             'change-by-statistic' : perform predictions on energies of target dataset,
-                    and do least sqaure on the errors to obtain the target shift as bias.
+                    and do least square on the errors to obtain the target shift as bias.
             'set-by-statistic' : directly use the statistic energy bias in the target dataset.
         """
         self.fitting.change_energy_bias(

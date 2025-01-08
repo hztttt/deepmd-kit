@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-from pathlib import (
-    Path,
-)
 from typing import (
+    TYPE_CHECKING,
     Optional,
 )
 
@@ -12,6 +10,11 @@ from deepmd.infer.deep_dipole import (
 from deepmd.tf.infer.deep_tensor import (
     DeepTensor,
 )
+
+if TYPE_CHECKING:
+    from pathlib import (
+        Path,
+    )
 
 __all__ = [
     "DeepDipole",
@@ -39,7 +42,7 @@ class DeepDipoleOld(DeepTensor):
     --------
     For developers: `DeepTensor` initializer must be called at the end after
     `self.tensors` are modified because it uses the data in `self.tensors` dict.
-    Do not chanage the order!
+    Do not change the order!
     """
 
     def __init__(

@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Optional,
 )
@@ -46,7 +45,7 @@ class DPAtomicModel(BaseAtomicModel):
         fitting,
         type_map: list[str],
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(type_map, **kwargs)
         self.type_map = type_map
         self.descriptor = descriptor
@@ -86,6 +85,37 @@ class DPAtomicModel(BaseAtomicModel):
         """Returns whether the atomic model needs sorted nlist when using `forward_lower`."""
         return self.descriptor.need_sorted_nlist_for_lower()
 
+    def enable_compression(
+        self,
+        min_nbor_dist: float,
+        table_extrapolate: float = 5,
+        table_stride_1: float = 0.01,
+        table_stride_2: float = 0.1,
+        check_frequency: int = -1,
+    ) -> None:
+        """Call descriptor enable_compression().
+
+        Parameters
+        ----------
+        min_nbor_dist
+            The nearest distance between atoms
+        table_extrapolate
+            The scale of model extrapolation
+        table_stride_1
+            The uniform stride of the first table
+        table_stride_2
+            The uniform stride of the second table
+        check_frequency
+            The overflow check frequency
+        """
+        self.descriptor.enable_compression(
+            min_nbor_dist,
+            table_extrapolate,
+            table_stride_1,
+            table_stride_2,
+            check_frequency,
+        )
+
     def forward_atomic(
         self,
         extended_coord: np.ndarray,
@@ -100,7 +130,7 @@ class DPAtomicModel(BaseAtomicModel):
         Parameters
         ----------
         extended_coord
-            coodinates in extended region
+            coordinates in extended region
         extended_atype
             atomic type in extended region
         nlist
@@ -169,14 +199,20 @@ class DPAtomicModel(BaseAtomicModel):
         )
         return dd
 
+    # for subclass overridden
+    base_descriptor_cls = BaseDescriptor
+    """The base descriptor class."""
+    base_fitting_cls = BaseFitting
+    """The base fitting class."""
+
     @classmethod
     def deserialize(cls, data) -> "DPAtomicModel":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 2)
         data.pop("@class")
         data.pop("type")
-        descriptor_obj = BaseDescriptor.deserialize(data.pop("descriptor"))
-        fitting_obj = BaseFitting.deserialize(data.pop("fitting"))
+        descriptor_obj = cls.base_descriptor_cls.deserialize(data.pop("descriptor"))
+        fitting_obj = cls.base_fitting_cls.deserialize(data.pop("fitting"))
         data["descriptor"] = descriptor_obj
         data["fitting"] = fitting_obj
         obj = super().deserialize(data)

@@ -22,11 +22,17 @@ from deepmd.pt.model.network.mlp import (
 from deepmd.pt.utils import (
     env,
 )
+from deepmd.pt.utils.env import (
+    PRECISION_DICT,
+)
 from deepmd.pt.utils.env_mat_stat import (
     EnvMatStatSe,
 )
 from deepmd.pt.utils.exclude_mask import (
     PairExcludeMask,
+)
+from deepmd.pt.utils.spin import (
+    concat_switch_virtual,
 )
 from deepmd.pt.utils.utils import (
     ActivationFn,
@@ -60,7 +66,7 @@ if not hasattr(torch.ops.deepmd, "border_op"):
             "See documentation for DPA-2 for details."
         )
 
-    # Note: this hack cannot actually save a model that can be runned using LAMMPS.
+    # Note: this hack cannot actually save a model that can be run using LAMMPS.
     torch.ops.deepmd.border_op = border_op
 
 
@@ -105,7 +111,7 @@ class DescrptBlockRepformers(DescriptorBlock):
         use_sqrt_nnei: bool = True,
         g1_out_conv: bool = True,
         g1_out_mlp: bool = True,
-    ):
+    ) -> None:
         r"""
         The repformer descriptor block.
 
@@ -193,8 +199,8 @@ class DescrptBlockRepformers(DescriptorBlock):
             Random seed for parameter initialization.
         """
         super().__init__()
-        self.rcut = rcut
-        self.rcut_smth = rcut_smth
+        self.rcut = float(rcut)
+        self.rcut_smth = float(rcut_smth)
         self.ntypes = ntypes
         self.nlayers = nlayers
         sel = [sel] if isinstance(sel, int) else sel
@@ -234,6 +240,7 @@ class DescrptBlockRepformers(DescriptorBlock):
         self.reinit_exclude(exclude_types)
         self.env_protection = env_protection
         self.precision = precision
+        self.prec = PRECISION_DICT[precision]
         self.trainable_ln = trainable_ln
         self.ln_eps = ln_eps
         self.epsilon = 1e-4
@@ -283,12 +290,8 @@ class DescrptBlockRepformers(DescriptorBlock):
         self.layers = torch.nn.ModuleList(layers)
 
         wanted_shape = (self.ntypes, self.nnei, 4)
-        mean = torch.zeros(
-            wanted_shape, dtype=env.GLOBAL_PT_FLOAT_PRECISION, device=env.DEVICE
-        )
-        stddev = torch.ones(
-            wanted_shape, dtype=env.GLOBAL_PT_FLOAT_PRECISION, device=env.DEVICE
-        )
+        mean = torch.zeros(wanted_shape, dtype=self.prec, device=env.DEVICE)
+        stddev = torch.ones(wanted_shape, dtype=self.prec, device=env.DEVICE)
         self.register_buffer("mean", mean)
         self.register_buffer("stddev", stddev)
         self.stats = None
@@ -325,7 +328,7 @@ class DescrptBlockRepformers(DescriptorBlock):
         """Returns the embedding dimension g2."""
         return self.g2_dim
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ("avg", "data_avg", "davg"):
             self.mean = value
         elif key in ("std", "data_std", "dstd"):
@@ -342,11 +345,11 @@ class DescrptBlockRepformers(DescriptorBlock):
             raise KeyError(key)
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -375,7 +378,7 @@ class DescrptBlockRepformers(DescriptorBlock):
     def reinit_exclude(
         self,
         exclude_types: list[tuple[int, int]] = [],
-    ):
+    ) -> None:
         self.exclude_types = exclude_types
         self.emask = PairExcludeMask(self.ntypes, exclude_types=exclude_types)
 
@@ -386,6 +389,7 @@ class DescrptBlockRepformers(DescriptorBlock):
         extended_atype: torch.Tensor,
         extended_atype_embd: Optional[torch.Tensor] = None,
         mapping: Optional[torch.Tensor] = None,
+        type_embedding: Optional[torch.Tensor] = None,
         comm_dict: Optional[dict[str, torch.Tensor]] = None,
     ):
         if comm_dict is None:
@@ -422,6 +426,7 @@ class DescrptBlockRepformers(DescriptorBlock):
             atype_embd = extended_atype_embd
         assert isinstance(atype_embd, torch.Tensor)  # for jit
         g1 = self.act(atype_embd)
+        ng1 = g1.shape[-1]
         # nb x nloc x nnei x 1,  nb x nloc x nnei x 3
         if not self.direct_dist:
             g2, h2 = torch.split(dmatrix, [1, 3], dim=-1)
@@ -448,10 +453,27 @@ class DescrptBlockRepformers(DescriptorBlock):
                 assert mapping is not None
                 g1_ext = torch.gather(g1, 1, mapping)
             else:
-                n_padding = nall - nloc
-                g1 = torch.nn.functional.pad(
-                    g1.squeeze(0), (0, 0, 0, n_padding), value=0.0
-                )
+                has_spin = "has_spin" in comm_dict
+                if not has_spin:
+                    n_padding = nall - nloc
+                    g1 = torch.nn.functional.pad(
+                        g1.squeeze(0), (0, 0, 0, n_padding), value=0.0
+                    )
+                    real_nloc = nloc
+                    real_nall = nall
+                else:
+                    # for spin
+                    real_nloc = nloc // 2
+                    real_nall = nall // 2
+                    real_n_padding = real_nall - real_nloc
+                    g1_real, g1_virtual = torch.split(g1, [real_nloc, real_nloc], dim=1)
+                    # mix_g1: nb x real_nloc x (ng1 * 2)
+                    mix_g1 = torch.cat([g1_real, g1_virtual], dim=2)
+                    # nb x real_nall x (ng1 * 2)
+                    g1 = torch.nn.functional.pad(
+                        mix_g1.squeeze(0), (0, 0, 0, real_n_padding), value=0.0
+                    )
+
                 assert "send_list" in comm_dict
                 assert "send_proc" in comm_dict
                 assert "recv_proc" in comm_dict
@@ -466,10 +488,23 @@ class DescrptBlockRepformers(DescriptorBlock):
                     comm_dict["recv_num"],
                     g1,
                     comm_dict["communicator"],
-                    torch.tensor(nloc),  # pylint: disable=no-explicit-dtype,no-explicit-device
-                    torch.tensor(nall - nloc),  # pylint: disable=no-explicit-dtype,no-explicit-device
+                    torch.tensor(
+                        real_nloc,
+                        dtype=torch.int32,
+                        device=env.DEVICE,
+                    ),  # should be int of c++
+                    torch.tensor(
+                        real_nall - real_nloc,
+                        dtype=torch.int32,
+                        device=env.DEVICE,
+                    ),  # should be int of c++
                 )
                 g1_ext = ret[0].unsqueeze(0)
+                if has_spin:
+                    g1_real_ext, g1_virtual_ext = torch.split(g1_ext, [ng1, ng1], dim=2)
+                    g1_ext = concat_switch_virtual(
+                        g1_real_ext, g1_virtual_ext, real_nloc
+                    )
             g1, g2, h2 = ll.forward(
                 g1_ext,
                 g2,
@@ -498,7 +533,7 @@ class DescrptBlockRepformers(DescriptorBlock):
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         path: Optional[DPPath] = None,
-    ):
+    ) -> None:
         """
         Compute the input statistics (e.g. mean and stddev) for the descriptors from packed data.
 
@@ -530,8 +565,12 @@ class DescrptBlockRepformers(DescriptorBlock):
         self.stats = env_mat_stat.stats
         mean, stddev = env_mat_stat()
         if not self.set_davg_zero:
-            self.mean.copy_(torch.tensor(mean, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
-        self.stddev.copy_(torch.tensor(stddev, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
+            self.mean.copy_(
+                torch.tensor(mean, device=env.DEVICE, dtype=self.mean.dtype)
+            )
+        self.stddev.copy_(
+            torch.tensor(stddev, device=env.DEVICE, dtype=self.stddev.dtype)
+        )
 
     def get_stats(self) -> dict[str, StatItem]:
         """Get the statistics of the descriptor."""

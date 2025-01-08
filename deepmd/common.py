@@ -62,13 +62,11 @@ VALID_ACTIVATION: set[_ACTIVATION] = set(get_args(_ACTIVATION))
 
 if TYPE_CHECKING:
     _DICT_VAL = TypeVar("_DICT_VAL")
-    __all__.extend(
-        [
-            "_DICT_VAL",
-            "_PRECISION",
-            "_ACTIVATION",
-        ]
-    )
+    __all__ += [
+        "_DICT_VAL",
+        "_PRECISION",
+        "_ACTIVATION",
+    ]
 
 
 def select_idx_map(atom_types: np.ndarray, select_types: np.ndarray) -> np.ndarray:
@@ -77,7 +75,7 @@ def select_idx_map(atom_types: np.ndarray, select_types: np.ndarray) -> np.ndarr
     Parameters
     ----------
     atom_types : np.ndarray
-        array specifing type for each atoms as integer
+        array specifying type for each atoms as integer
     select_types : np.ndarray
         types of atoms you want to find indices for
 
@@ -126,7 +124,7 @@ def make_default_mesh(pbc: bool, mixed_type: bool) -> np.ndarray:
 def j_deprecated(
     jdata: dict[str, "_DICT_VAL"], key: str, deprecated_key: list[str] = []
 ) -> "_DICT_VAL":
-    """Assert that supplied dictionary conaines specified key.
+    """Assert that supplied dictionary contains specified key.
 
     Parameters
     ----------
@@ -218,7 +216,7 @@ def get_np_precision(precision: "_PRECISION") -> np.dtype:
     Returns
     -------
     np.dtype
-        numpy presicion constant
+        numpy precision constant
 
     Raises
     ------
@@ -237,7 +235,7 @@ def get_np_precision(precision: "_PRECISION") -> np.dtype:
         raise RuntimeError(f"{precision} is not a valid precision")
 
 
-def symlink_prefix_files(old_prefix: str, new_prefix: str):
+def symlink_prefix_files(old_prefix: str, new_prefix: str) -> None:
     """Create symlinks from old checkpoint prefix to new one.
 
     On Windows this function will copy files instead of creating symlinks.

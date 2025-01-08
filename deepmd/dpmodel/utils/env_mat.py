@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 from typing import (
     Optional,
-    Union,
 )
 
 import array_api_compat
@@ -16,7 +15,7 @@ from deepmd.dpmodel.array_api import (
 )
 
 
-@support_array_api(version="2022.12")
+@support_array_api(version="2023.12")
 def compute_smooth_weight(
     distance: np.ndarray,
     rmin: float,
@@ -26,14 +25,11 @@ def compute_smooth_weight(
     if rmin >= rmax:
         raise ValueError("rmin should be less than rmax.")
     xp = array_api_compat.array_namespace(distance)
-    min_mask = distance <= rmin
-    max_mask = distance >= rmax
-    mid_mask = xp.logical_not(xp.logical_or(min_mask, max_mask))
+    distance = xp.clip(distance, min=rmin, max=rmax)
     uu = (distance - rmin) / (rmax - rmin)
-    vv = uu * uu * uu * (-6.0 * uu * uu + 15.0 * uu - 10.0) + 1.0
-    return vv * xp.astype(mid_mask, distance.dtype) + xp.astype(
-        min_mask, distance.dtype
-    )
+    uu2 = uu * uu
+    vv = uu2 * uu * (-6.0 * uu2 + 15.0 * uu - 10.0) + 1.0
+    return vv
 
 
 def _make_env_mat(
@@ -61,7 +57,9 @@ def _make_env_mat(
     # nf x nloc x nnei x 3
     diff = coord_r - coord_l
     # nf x nloc x nnei
-    length = xp.linalg.vector_norm(diff, axis=-1, keepdims=True)
+    # the grad of JAX vector_norm is NaN at x=0
+    diff_ = xp.where(xp.abs(diff) < 1e-30, xp.full_like(diff, 1e-30), diff)
+    length = xp.linalg.vector_norm(diff_, axis=-1, keepdims=True)
     # for index 0 nloc atom
     length = length + xp.astype(~xp.expand_dims(mask, axis=-1), length.dtype)
     t0 = 1 / (length + protection)
@@ -81,7 +79,7 @@ class EnvMat(NativeOP):
         rcut,
         rcut_smth,
         protection: float = 0.0,
-    ):
+    ) -> None:
         self.rcut = rcut
         self.rcut_smth = rcut_smth
         self.protection = protection
@@ -94,7 +92,7 @@ class EnvMat(NativeOP):
         davg: Optional[np.ndarray] = None,
         dstd: Optional[np.ndarray] = None,
         radial_only: bool = False,
-    ) -> Union[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute the environment matrix.
 
         Parameters

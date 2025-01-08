@@ -28,6 +28,7 @@ from deepmd.pt.loss import (
     EnergySpinLoss,
     EnergyStdLoss,
     PropertyLoss,
+    TaskLoss,
     TensorLoss,
 )
 from deepmd.pt.model.model import (
@@ -46,7 +47,7 @@ from deepmd.pt.utils import (
 )
 from deepmd.pt.utils.dataloader import (
     BufferedIterator,
-    get_weighted_sampler,
+    get_sampler_from_params,
 )
 from deepmd.pt.utils.env import (
     DEVICE,
@@ -98,7 +99,7 @@ class Trainer:
         shared_links=None,
         finetune_links=None,
         init_frz_model=None,
-    ):
+    ) -> None:
         """Construct a DeePMD trainer.
 
         Args:
@@ -159,19 +160,7 @@ class Trainer:
 
         def get_data_loader(_training_data, _validation_data, _training_params):
             def get_dataloader_and_buffer(_data, _params):
-                if "auto_prob" in _training_params["training_data"]:
-                    _sampler = get_weighted_sampler(
-                        _data, _params["training_data"]["auto_prob"]
-                    )
-                elif "sys_probs" in _training_params["training_data"]:
-                    _sampler = get_weighted_sampler(
-                        _data,
-                        _params["training_data"]["sys_probs"],
-                        sys_prob=True,
-                    )
-                else:
-                    _sampler = get_weighted_sampler(_data, "prob_sys_size")
-
+                _sampler = get_sampler_from_params(_data, _params)
                 if _sampler is None:
                     log.warning(
                         "Sampler not specified!"
@@ -192,14 +181,16 @@ class Trainer:
                 return _dataloader, _data_buffered
 
             training_dataloader, training_data_buffered = get_dataloader_and_buffer(
-                _training_data, _training_params
+                _training_data, _training_params["training_data"]
             )
 
             if _validation_data is not None:
                 (
                     validation_dataloader,
                     validation_data_buffered,
-                ) = get_dataloader_and_buffer(_validation_data, _training_params)
+                ) = get_dataloader_and_buffer(
+                    _validation_data, _training_params["validation_data"]
+                )
                 valid_numb_batch = _training_params["validation_data"].get(
                     "numb_btch", 1
                 )
@@ -400,7 +391,9 @@ class Trainer:
         optimizer_state_dict = None
         if resuming:
             log.info(f"Resuming from {resume_model}.")
-            state_dict = torch.load(resume_model, map_location=DEVICE)
+            state_dict = torch.load(
+                resume_model, map_location=DEVICE, weights_only=True
+            )
             if "model" in state_dict:
                 optimizer_state_dict = (
                     state_dict["optimizer"] if finetune_model is None else None
@@ -474,7 +467,7 @@ class Trainer:
                         _new_state_dict,
                         _origin_state_dict,
                         _random_state_dict,
-                    ):
+                    ) -> None:
                         _new_fitting = _finetune_rule_single.get_random_fitting()
                         _model_key_from = _finetune_rule_single.get_model_branch()
                         target_keys = [
@@ -586,7 +579,7 @@ class Trainer:
         # author: iProzd
         if self.opt_type == "Adam":
             self.optimizer = torch.optim.Adam(
-                self.wrapper.parameters(), lr=self.lr_exp.start_lr
+                self.wrapper.parameters(), lr=self.lr_exp.start_lr, fused=True
             )
             if optimizer_state_dict is not None and self.restart_training:
                 self.optimizer.load_state_dict(optimizer_state_dict)
@@ -624,7 +617,7 @@ class Trainer:
         self.profiling = training_params.get("profiling", False)
         self.profiling_file = training_params.get("profiling_file", "timeline.json")
 
-    def run(self):
+    def run(self) -> None:
         fout = (
             open(
                 self.disp_file,
@@ -659,11 +652,16 @@ class Trainer:
             )
             prof.start()
 
-        def step(_step_id, task_key="Default"):
+        def step(_step_id, task_key="Default") -> None:
+            if self.multi_task:
+                model_index = dp_random.choice(
+                    np.arange(self.num_model, dtype=np.int_),
+                    p=self.model_prob,
+                )
+                task_key = self.model_keys[model_index]
             # PyTorch Profiler
             if self.enable_profiler or self.profiling:
                 prof.step()
-            self.wrapper.train()
             if isinstance(self.lr_exp, dict):
                 _lr = self.lr_exp[task_key]
             else:
@@ -689,12 +687,11 @@ class Trainer:
                 )
                 loss.backward()
                 if self.gradient_max_norm > 0.0:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(
-                        self.wrapper.parameters(), self.gradient_max_norm
+                    torch.nn.utils.clip_grad_norm_(
+                        self.wrapper.parameters(),
+                        self.gradient_max_norm,
+                        error_if_nonfinite=True,
                     )
-                    if not torch.isfinite(grad_norm).all():
-                        # check local gradnorm single GPU case, trigger NanDetector
-                        raise FloatingPointError("gradients are Nan/Inf")
                 with torch.device("cpu"):
                     self.optimizer.step()
                 self.scheduler.step()
@@ -773,7 +770,7 @@ class Trainer:
             if self.display_in_training and (
                 display_step_id % self.disp_freq == 0 or display_step_id == 1
             ):
-                self.wrapper.eval()
+                self.wrapper.eval()  # Will set to train mode before fininshing validation
 
                 def log_loss_train(_loss, _more_loss, _task_key="Default"):
                     results = {}
@@ -879,6 +876,7 @@ class Trainer:
                                         learning_rate=None,
                                     )
                                 )
+                self.wrapper.train()
 
                 current_time = time.time()
                 train_time = current_time - self.t0
@@ -934,24 +932,11 @@ class Trainer:
                         f"{task_key}/{item}", more_loss[item], display_step_id
                     )
 
+        self.wrapper.train()
         self.t0 = time.time()
         self.total_train_time = 0.0
-        for step_id in range(self.num_steps):
-            if step_id < self.start_step:
-                continue
-            if self.multi_task:
-                chosen_index_list = dp_random.choice(
-                    np.arange(self.num_model),  # pylint: disable=no-explicit-dtype
-                    p=np.array(self.model_prob),
-                    size=self.world_size,
-                    replace=True,
-                )
-                assert chosen_index_list.size == self.world_size
-                model_index = chosen_index_list[self.rank]
-                model_key = self.model_keys[model_index]
-            else:
-                model_key = "Default"
-            step(step_id, model_key)
+        for step_id in range(self.start_step, self.num_steps):
+            step(step_id)
             if JIT:
                 break
 
@@ -1032,7 +1017,7 @@ class Trainer:
                     f"The profiling trace have been saved to: {self.profiling_file}"
                 )
 
-    def save_model(self, save_path, lr=0.0, step=0):
+    def save_model(self, save_path, lr=0.0, step=0) -> None:
         module = (
             self.wrapper.module
             if dist.is_available() and dist.is_initialized()
@@ -1134,7 +1119,7 @@ class Trainer:
         log_dict["sid"] = batch_data["sid"]
         return input_dict, label_dict, log_dict
 
-    def print_header(self, fout, train_results, valid_results):
+    def print_header(self, fout, train_results, valid_results) -> None:
         train_keys = sorted(train_results.keys())
         print_str = ""
         print_str += "# %5s" % "step"
@@ -1165,7 +1150,9 @@ class Trainer:
         fout.write(print_str)
         fout.flush()
 
-    def print_on_training(self, fout, step_id, cur_lr, train_results, valid_results):
+    def print_on_training(
+        self, fout, step_id, cur_lr, train_results, valid_results
+    ) -> None:
         train_keys = sorted(train_results.keys())
         print_str = ""
         print_str += "%7d" % step_id
@@ -1256,7 +1243,8 @@ def get_loss(loss_params, start_lr, _ntypes, _model):
         loss_params["task_dim"] = task_dim
         return PropertyLoss(**loss_params)
     else:
-        raise NotImplementedError
+        loss_params["starter_learning_rate"] = start_lr
+        return TaskLoss.get_class_by_type(loss_type).get_loss(loss_params)
 
 
 def get_single_model(

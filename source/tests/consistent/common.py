@@ -69,11 +69,13 @@ __all__ = [
     "INSTALLED_ARRAY_API_STRICT",
 ]
 
+SKIP_FLAG = object()
+
 
 class CommonTest(ABC):
     data: ClassVar[dict]
     """Arguments data."""
-    addtional_data: ClassVar[dict] = {}
+    additional_data: ClassVar[dict] = {}
     """Additional data that will not be checked."""
     tf_class: ClassVar[Optional[type]]
     """TensorFlow model class."""
@@ -102,10 +104,10 @@ class CommonTest(ABC):
     atol = 1e-10
     """Absolute tolerance for comparing the return value. Override for float32."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.unique_id = uuid4().hex
 
-    def reset_unique_id(self):
+    def reset_unique_id(self) -> None:
         self.unique_id = uuid4().hex
 
     def init_backend_cls(self, cls) -> Any:
@@ -126,7 +128,7 @@ class CommonTest(ABC):
 
     def pass_data_to_cls(self, cls, data) -> Any:
         """Pass data to the class."""
-        return cls(**data, **self.addtional_data)
+        return cls(**data, **self.additional_data)
 
     @abstractmethod
     def build_tf(self, obj: Any, suffix: str) -> tuple[list, dict]:
@@ -301,7 +303,7 @@ class CommonTest(ABC):
             return self.get_array_api_strict_ret_serialization_from_cls(obj)
         raise ValueError("No available reference")
 
-    def test_tf_consistent_with_ref(self):
+    def test_tf_consistent_with_ref(self) -> None:
         """Test whether TF and reference are consistent."""
         if self.skip_tf:
             self.skipTest("Unsupported backend")
@@ -331,7 +333,7 @@ class CommonTest(ABC):
             )
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
-    def test_tf_self_consistent(self):
+    def test_tf_self_consistent(self) -> None:
         """Test whether TF is self consistent."""
         if self.skip_tf:
             self.skipTest("Unsupported backend")
@@ -347,7 +349,7 @@ class CommonTest(ABC):
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
     @unittest.skipIf(TEST_DEVICE != "cpu" and CI, "Only test on CPU.")
-    def test_dp_consistent_with_ref(self):
+    def test_dp_consistent_with_ref(self) -> None:
         """Test whether DP and reference are consistent."""
         if self.skip_dp:
             self.skipTest("Unsupported backend")
@@ -362,11 +364,13 @@ class CommonTest(ABC):
         data2 = dp_obj.serialize()
         np.testing.assert_equal(data1, data2)
         for rr1, rr2 in zip(ret1, ret2):
+            if rr1 is SKIP_FLAG or rr2 is SKIP_FLAG:
+                continue
             np.testing.assert_allclose(rr1, rr2, rtol=self.rtol, atol=self.atol)
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
     @unittest.skipIf(TEST_DEVICE != "cpu" and CI, "Only test on CPU.")
-    def test_dp_self_consistent(self):
+    def test_dp_self_consistent(self) -> None:
         """Test whether DP is self consistent."""
         if self.skip_dp:
             self.skipTest("Unsupported backend")
@@ -382,7 +386,7 @@ class CommonTest(ABC):
             else:
                 self.assertEqual(rr1, rr2)
 
-    def test_pt_consistent_with_ref(self):
+    def test_pt_consistent_with_ref(self) -> None:
         """Test whether PT and reference are consistent."""
         if self.skip_pt:
             self.skipTest("Unsupported backend")
@@ -405,7 +409,7 @@ class CommonTest(ABC):
             np.testing.assert_allclose(rr1, rr2, rtol=self.rtol, atol=self.atol)
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
-    def test_pt_self_consistent(self):
+    def test_pt_self_consistent(self) -> None:
         """Test whether PT is self consistent."""
         if self.skip_pt:
             self.skipTest("Unsupported backend")
@@ -421,7 +425,7 @@ class CommonTest(ABC):
             else:
                 self.assertEqual(rr1, rr2)
 
-    def test_jax_consistent_with_ref(self):
+    def test_jax_consistent_with_ref(self) -> None:
         """Test whether JAX and reference are consistent."""
         if self.skip_jax:
             self.skipTest("Unsupported backend")
@@ -439,7 +443,7 @@ class CommonTest(ABC):
             np.testing.assert_allclose(rr1, rr2, rtol=self.rtol, atol=self.atol)
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
-    def test_jax_self_consistent(self):
+    def test_jax_self_consistent(self) -> None:
         """Test whether JAX is self consistent."""
         if self.skip_jax:
             self.skipTest("Unsupported backend")
@@ -456,7 +460,7 @@ class CommonTest(ABC):
                 self.assertEqual(rr1, rr2)
 
     @unittest.skipIf(TEST_DEVICE != "cpu" and CI, "Only test on CPU.")
-    def test_array_api_strict_consistent_with_ref(self):
+    def test_array_api_strict_consistent_with_ref(self) -> None:
         """Test whether array_api_strict and reference are consistent."""
         if self.skip_array_api_strict:
             self.skipTest("Unsupported backend")
@@ -475,7 +479,7 @@ class CommonTest(ABC):
             assert rr1.dtype == rr2.dtype, f"{rr1.dtype} != {rr2.dtype}"
 
     @unittest.skipIf(TEST_DEVICE != "cpu" and CI, "Only test on CPU.")
-    def test_array_api_strict_self_consistent(self):
+    def test_array_api_strict_self_consistent(self) -> None:
         """Test whether array_api_strict is self consistent."""
         if self.skip_array_api_strict:
             self.skipTest("Unsupported backend")
@@ -500,7 +504,7 @@ class CommonTest(ABC):
 def parameterized(*attrs: tuple, **subblock_attrs: tuple) -> Callable:
     """Parameterized test.
 
-    Orginal class will not be actually generated. Avoid inherbiting from it.
+    Original class will not be actually generated. Avoid inherbiting from it.
     New classes are generated with the name of the original class and the
     parameters.
 

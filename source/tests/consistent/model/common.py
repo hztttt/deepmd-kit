@@ -6,8 +6,12 @@ from typing import (
 from deepmd.common import (
     make_default_mesh,
 )
+from deepmd.dpmodel.common import (
+    to_numpy_array,
+)
 
 from ..common import (
+    INSTALLED_JAX,
     INSTALLED_PT,
     INSTALLED_TF,
 )
@@ -20,12 +24,19 @@ if INSTALLED_TF:
         GLOBAL_TF_FLOAT_PRECISION,
         tf,
     )
+if INSTALLED_JAX:
+    from deepmd.jax.common import to_jax_array as numpy_to_jax
+    from deepmd.jax.env import (
+        jnp,
+    )
 
 
 class ModelTest:
     """Useful utilities for model tests."""
 
-    def build_tf_model(self, obj, natoms, coords, atype, box, suffix):
+    def build_tf_model(
+        self, obj, natoms, coords, atype, box, suffix, ret_key: str = "energy"
+    ):
         t_coord = tf.placeholder(
             GLOBAL_TF_FLOAT_PRECISION, [None, None, None], name="i_coord"
         )
@@ -42,7 +53,32 @@ class ModelTest:
             {},
             suffix=suffix,
         )
-        return [ret["energy"], ret["atom_ener"]], {
+        if ret_key == "energy":
+            ret_list = [
+                ret["energy"],
+                ret["atom_ener"],
+                ret["force"],
+                ret["virial"],
+                ret["atom_virial"],
+            ]
+        elif ret_key == "dos":
+            ret_list = [
+                ret["dos"],
+                ret["atom_dos"],
+            ]
+        elif ret_key == "dipole":
+            ret_list = [
+                ret["global_dipole"],
+                ret["dipole"],
+            ]
+        elif ret_key == "polar":
+            ret_list = [
+                ret["polar"],
+                ret["global_polar"],
+            ]
+        else:
+            raise NotImplementedError
+        return ret_list, {
             t_coord: coords,
             t_type: atype,
             t_natoms: natoms,
@@ -60,5 +96,21 @@ class ModelTest:
                 numpy_to_torch(coords),
                 numpy_to_torch(atype),
                 box=numpy_to_torch(box),
+                do_atomic_virial=True,
+            ).items()
+        }
+
+    def eval_jax_model(self, jax_obj: Any, natoms, coords, atype, box) -> Any:
+        def assert_jax_array(arr):
+            assert isinstance(arr, jnp.ndarray) or arr is None
+            return arr
+
+        return {
+            kk: to_numpy_array(assert_jax_array(vv))
+            for kk, vv in jax_obj(
+                numpy_to_jax(coords),
+                numpy_to_jax(atype),
+                box=numpy_to_jax(box),
+                do_atomic_virial=True,
             ).items()
         }

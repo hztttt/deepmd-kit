@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 import logging
 from typing import (
     Optional,
@@ -50,7 +49,7 @@ class InvarFitting(GeneralFitting):
     neuron : list[int]
         Number of neurons in each hidden layers of the fitting net.
     bias_atom_e : torch.Tensor, optional
-        Average enery per atom for each element.
+        Average energy per atom for each element.
     resnet_dt : bool
         Using time-step in the ResNet construction.
     numb_fparam : int
@@ -74,10 +73,11 @@ class InvarFitting(GeneralFitting):
         Specifying atomic energy contribution in vacuum.
         The value is a list specifying the bias. the elements can be None or np.array of output shape.
         For example: [None, [2.]] means type 0 is not set, type 1 is set to [2.]
-        The `set_davg_zero` key in the descrptor should be set.
+        The `set_davg_zero` key in the descriptor should be set.
     type_map: list[str], Optional
         A list of strings. Give the name to each type of atoms.
-
+    use_aparam_as_mask: bool
+        If True, the aparam will not be used in fitting net for embedding.
     """
 
     def __init__(
@@ -99,8 +99,9 @@ class InvarFitting(GeneralFitting):
         exclude_types: list[int] = [],
         atom_ener: Optional[list[Optional[torch.Tensor]]] = None,
         type_map: Optional[list[str]] = None,
+        use_aparam_as_mask: bool = False,
         **kwargs,
-    ):
+    ) -> None:
         self.dim_out = dim_out
         self.atom_ener = atom_ener
         super().__init__(
@@ -122,6 +123,7 @@ class InvarFitting(GeneralFitting):
             if atom_ener is None or len([x for x in atom_ener if x is not None]) == 0
             else [x is not None for x in atom_ener],
             type_map=type_map,
+            use_aparam_as_mask=use_aparam_as_mask,
             **kwargs,
         )
 
@@ -138,7 +140,7 @@ class InvarFitting(GeneralFitting):
 
     @classmethod
     def deserialize(cls, data: dict) -> "GeneralFitting":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         return super().deserialize(data)
 
@@ -175,7 +177,10 @@ class InvarFitting(GeneralFitting):
         -------
         - `torch.Tensor`: Total energy with shape [nframes, natoms[0]].
         """
-        return self._forward_common(descriptor, atype, gr, g2, h2, fparam, aparam)
+        out = self._forward_common(descriptor, atype, gr, g2, h2, fparam, aparam)[
+            self.var_name
+        ]
+        return {self.var_name: out.to(env.GLOBAL_PT_FLOAT_PRECISION)}
 
     # make jit happy with torch 2.0.0
     exclude_types: list[int]

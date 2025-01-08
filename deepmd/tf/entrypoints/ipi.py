@@ -4,6 +4,9 @@
 import os
 import subprocess
 import sys
+from typing import (
+    NoReturn,
+)
 
 from deepmd.tf.lmp import (
     get_op_dir,
@@ -13,7 +16,7 @@ ROOT_DIR = get_op_dir()
 
 
 def _program(name: str, args: list[str]):
-    """Execuate a program.
+    """Execute a program.
 
     Parameters
     ----------
@@ -25,7 +28,7 @@ def _program(name: str, args: list[str]):
     return subprocess.call([os.path.join(ROOT_DIR, name), *args], close_fds=False)
 
 
-def dp_ipi():
+def dp_ipi() -> NoReturn:
     """dp_ipi."""
     suffix = ".exe" if os.name == "nt" else ""
     raise SystemExit(_program("dp_ipi" + suffix, sys.argv[1:]))

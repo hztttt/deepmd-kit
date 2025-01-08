@@ -5,6 +5,7 @@ import logging
 import os
 from typing import (
     TYPE_CHECKING,
+    NoReturn,
     Optional,
 )
 
@@ -23,7 +24,7 @@ logging.getLogger(__name__)
 
 __all__ = ["set_log_handles"]
 
-# logger formater
+# logger formatter
 FFORMATTER = logging.Formatter(
     "[%(asctime)s] %(app_name)s %(levelname)-7s %(name)-45s %(message)s"
 )
@@ -43,7 +44,7 @@ CFORMATTER_MPI = logging.Formatter(
 class _AppFilter(logging.Filter):
     """Add field `app_name` to log messages."""
 
-    def filter(self, record):
+    def filter(self, record) -> bool:
         record.app_name = "DEEPMD"
         return True
 
@@ -55,19 +56,19 @@ class _MPIRankFilter(logging.Filter):
         super().__init__(name="MPI_rank_id")
         self.mpi_rank = str(rank)
 
-    def filter(self, record):
+    def filter(self, record) -> bool:
         record.rank = self.mpi_rank
         return True
 
 
 class _MPIMasterFilter(logging.Filter):
-    """Filter that lets through only messages emited from rank==0."""
+    """Filter that lets through only messages emitted from rank==0."""
 
     def __init__(self, rank: int) -> None:
         super().__init__(name="MPI_master_log")
         self.mpi_rank = rank
 
-    def filter(self, record):
+    def filter(self, record) -> bool:
         if self.mpi_rank == 0:
             return True
         else:
@@ -94,7 +95,7 @@ class _MPIFileStream:
         self.stream.Set_atomicity(True)
         self.name = "MPIfilestream"
 
-    def write(self, msg: str):
+    def write(self, msg: str) -> None:
         """Write to MPI shared file stream.
 
         Parameters
@@ -106,7 +107,7 @@ class _MPIFileStream:
         b.extend(map(ord, msg))
         self.stream.Write_shared(b)
 
-    def close(self):
+    def close(self) -> None:
         """Synchronize and close MPI file stream."""
         self.stream.Sync()
         self.stream.Close()
@@ -137,14 +138,14 @@ class _MPIHandler(logging.FileHandler):
     def _open(self):
         return _MPIFileStream(self.baseFilename, self.MPI, self.mode)
 
-    def setStream(self, stream):
-        """Stream canot be reasigned in MPI mode."""
+    def setStream(self, stream) -> NoReturn:
+        """Stream cannot be reasigned in MPI mode."""
         raise NotImplementedError("Unable to do for MPI file handler!")
 
 
 def set_log_handles(
     level: int, log_path: Optional["Path"] = None, mpi_log: Optional[str] = None
-):
+) -> None:
     """Set desired level for package loggers and add file handlers.
 
     Parameters
@@ -254,7 +255,7 @@ def set_log_handles(
             fh.setFormatter(FFORMATTER_MPI)
         elif mpi_log == "workers":
             rank = MPI.COMM_WORLD.Get_rank()
-            # if file has suffix than inser rank number before suffix
+            # if file has suffix than insert rank number before suffix
             # e.g deepmd.log -> deepmd_<rank>.log
             # if no suffix is present, insert rank as suffix
             # e.g. deepmdlog -> deepmdlog.<rank>

@@ -1,7 +1,7 @@
-# Descriptor `"se_e2_r"` {{ tensorflow_icon }} {{ pytorch_icon }} {{ dpmodel_icon }}
+# Descriptor `"se_e2_r"` {{ tensorflow_icon }} {{ pytorch_icon }} {{ jax_icon }} {{ dpmodel_icon }}
 
 :::{note}
-**Supported backends**: TensorFlow {{ tensorflow_icon }}, PyTorch {{ pytorch_icon }}, DP {{ dpmodel_icon }}
+**Supported backends**: TensorFlow {{ tensorflow_icon }}, PyTorch {{ pytorch_icon }}, JAX {{ jax_icon }}, DP {{ dpmodel_icon }}
 :::
 
 The notation of `se_e2_r` is short for the Deep Potential Smooth Edition (DeepPot-SE) constructed from the radial information of atomic configurations. The `e2` stands for the embedding with two-atom information.
@@ -52,7 +52,7 @@ A complete training input script of this example can be found in the directory
 $deepmd_source_dir/examples/water/se_e2_r/input.json
 ```
 
-The training input script is very similar to that of [`se_e2_a`](train-se-e2-a.md). The only difference lies in the {ref}`descriptor <model/descriptor>` section
+The training input script is very similar to that of [`se_e2_a`](train-se-e2-a.md). The only difference lies in the {ref}`descriptor <model[standard]/descriptor>` section
 
 ```json
 	"descriptor": {
@@ -68,4 +68,17 @@ The training input script is very similar to that of [`se_e2_a`](train-se-e2-a.m
 	},
 ```
 
-The type of the descriptor is set by the key {ref}`type <model/descriptor/type>`.
+The type of the descriptor is set by the key {ref}`type <model[standard]/descriptor/type>`.
+
+## Type embedding support
+
+Type embdding is only supported in the TensorFlow backends.
+
+## Difference among different backends
+
+In the TensorFlow backend, {ref}`env_protection <model[standard]/descriptor[se_e2_r]/env_protection>` cannot be set to a non-zero value.
+In the PyTorch, JAX, and DP backend, {ref}`type_one_side <model[standard]/descriptor[se_e2_r]/type_one_side>` cannot be set to `false`.
+
+## Model compression
+
+Model compression is supported when type embedding is not used.

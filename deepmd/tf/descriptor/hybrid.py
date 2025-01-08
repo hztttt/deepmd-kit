@@ -72,7 +72,7 @@ class DescrptHybrid(Descriptor):
         for ii in range(1, self.numb_descrpt):
             assert (
                 self.descrpt_list[ii].get_ntypes() == self.descrpt_list[0].get_ntypes()
-            ), f"number of atom types in {ii}th descrptor does not match others"
+            ), f"number of atom types in {ii}th descriptor does not match others"
 
     def get_rcut(self) -> float:
         """Returns the cut-off radius."""
@@ -184,7 +184,7 @@ class DescrptHybrid(Descriptor):
                 **kwargs,
             )
 
-    def merge_input_stats(self, stat_dict):
+    def merge_input_stats(self, stat_dict) -> None:
         """Merge the statisitcs computed from compute_input_stats to obtain the self.davg and self.dstd.
 
         Parameters
@@ -317,7 +317,7 @@ class DescrptHybrid(Descriptor):
         check_frequency: int = -1,
         suffix: str = "",
     ) -> None:
-        """Reveive the statisitcs (distance, max_nbor_size and env_mat_range) of the
+        """Receive the statisitcs (distance, max_nbor_size and env_mat_range) of the
         training data.
 
         Parameters
@@ -352,7 +352,7 @@ class DescrptHybrid(Descriptor):
             )
 
     def enable_mixed_precision(self, mixed_prec: Optional[dict] = None) -> None:
-        """Reveive the mixed precision setting.
+        """Receive the mixed precision setting.
 
         Parameters
         ----------
@@ -434,7 +434,7 @@ class DescrptHybrid(Descriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
@@ -461,6 +461,8 @@ class DescrptHybrid(Descriptor):
         return local_jdata_cpy, min_nbor_dist
 
     def serialize(self, suffix: str = "") -> dict:
+        if hasattr(self, "type_embedding"):
+            raise NotImplementedError("hybrid + type embedding is not supported")
         return {
             "@class": "Descriptor",
             "type": "hybrid",
@@ -485,4 +487,8 @@ class DescrptHybrid(Descriptor):
                 for idx, ii in enumerate(data["list"])
             ],
         )
+        # search for type embedding
+        for ii in obj.descrpt_list:
+            if hasattr(ii, "type_embedding"):
+                raise NotImplementedError("hybrid + type embedding is not supported")
         return obj

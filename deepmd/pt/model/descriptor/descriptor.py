@@ -6,6 +6,7 @@ from abc import (
 )
 from typing import (
     Callable,
+    NoReturn,
     Optional,
     Union,
 )
@@ -102,7 +103,7 @@ class DescriptorBlock(torch.nn.Module, ABC, make_plugin_registry("DescriptorBloc
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         path: Optional[DPPath] = None,
-    ):
+    ) -> NoReturn:
         """
         Compute the input statistics (e.g. mean and stddev) for the descriptors from packed data.
 
@@ -125,11 +126,11 @@ class DescriptorBlock(torch.nn.Module, ABC, make_plugin_registry("DescriptorBloc
         """Get the statistics of the descriptor."""
         raise NotImplementedError
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> None:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         assert (
             self.__class__ == base_class.__class__
@@ -145,8 +146,16 @@ class DescriptorBlock(torch.nn.Module, ABC, make_plugin_registry("DescriptorBloc
                         base_env.stats[kk] += self.get_stats()[kk]
                     mean, stddev = base_env()
                     if not base_class.set_davg_zero:
-                        base_class.mean.copy_(torch.tensor(mean, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
-                    base_class.stddev.copy_(torch.tensor(stddev, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
+                        base_class.mean.copy_(
+                            torch.tensor(
+                                mean, device=env.DEVICE, dtype=base_class.mean.dtype
+                            )
+                        )
+                    base_class.stddev.copy_(
+                        torch.tensor(
+                            stddev, device=env.DEVICE, dtype=base_class.stddev.dtype
+                        )
+                    )
                 # must share, even if not do stat
                 self.mean = base_class.mean
                 self.stddev = base_class.stddev
@@ -165,6 +174,7 @@ class DescriptorBlock(torch.nn.Module, ABC, make_plugin_registry("DescriptorBloc
         extended_atype: torch.Tensor,
         extended_atype_embd: Optional[torch.Tensor] = None,
         mapping: Optional[torch.Tensor] = None,
+        type_embedding: Optional[torch.Tensor] = None,
     ):
         """Calculate DescriptorBlock."""
         pass
@@ -186,7 +196,7 @@ def make_default_type_embedding(
     return TypeEmbedNet(ntypes, aux["tebd_dim"]), aux
 
 
-def extend_descrpt_stat(des, type_map, des_with_stat=None):
+def extend_descrpt_stat(des, type_map, des_with_stat=None) -> None:
     r"""
     Extend the statistics of a descriptor block with types from newly provided `type_map`.
 

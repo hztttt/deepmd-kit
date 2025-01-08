@@ -317,7 +317,7 @@ class PairwiseDPRc(Model):
     def get_ntypes(self) -> int:
         return self.ntypes
 
-    def data_stat(self, data):
+    def data_stat(self, data) -> None:
         self.qm_model.data_stat(data)
         self.qmmm_model.data_stat(data)
 
@@ -421,7 +421,7 @@ class PairwiseDPRc(Model):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict

@@ -11,7 +11,7 @@ from deepmd.tf.env import (
 )
 
 
-def one_layer_rand_seed_shift():
+def one_layer_rand_seed_shift() -> int:
     return 3
 
 
@@ -264,7 +264,7 @@ def embedding_net(
     stddev : float
         Standard deviation of initializing network parameters
     bavg : float
-        Mean of network intial bias
+        Mean of network initial bias
     seed : int
         Random seed for initializing network parameters
     trainable : boolean
@@ -392,7 +392,7 @@ def embedding_net(
     return xx
 
 
-def variable_summaries(var: tf.Variable, name: str):
+def variable_summaries(var: tf.Variable, name: str) -> None:
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization).
 
     Parameters

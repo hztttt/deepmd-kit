@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 from typing import (
     Callable,
     Optional,
@@ -58,7 +57,7 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         type_map: list[str],
         weights: Optional[Union[str, list[float]]] = "mean",
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(type_map, **kwargs)
         super().init_out_stat()
 
@@ -90,7 +89,9 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         self.rcuts = torch.tensor(
             self.get_model_rcuts(), dtype=torch.float64, device=env.DEVICE
         )
-        self.nsels = torch.tensor(self.get_model_nsels(), device=env.DEVICE)  # pylint: disable=no-explicit-dtype
+        self.nsels = torch.tensor(
+            self.get_model_nsels(), device=env.DEVICE, dtype=torch.int32
+        )
 
         if isinstance(weights, str):
             assert weights in ["sum", "mean"]
@@ -182,6 +183,38 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         sorted_sels: list[int] = outer_sorted[:, 1].to(torch.int64).tolist()
         return sorted_rcuts, sorted_sels
 
+    def enable_compression(
+        self,
+        min_nbor_dist: float,
+        table_extrapolate: float = 5,
+        table_stride_1: float = 0.01,
+        table_stride_2: float = 0.1,
+        check_frequency: int = -1,
+    ) -> None:
+        """Compress model.
+
+        Parameters
+        ----------
+        min_nbor_dist
+            The nearest distance between atoms
+        table_extrapolate
+            The scale of model extrapolation
+        table_stride_1
+            The uniform stride of the first table
+        table_stride_2
+            The uniform stride of the second table
+        check_frequency
+            The overflow check frequency
+        """
+        for model in self.models:
+            model.enable_compression(
+                min_nbor_dist,
+                table_extrapolate,
+                table_stride_1,
+                table_stride_2,
+                check_frequency,
+            )
+
     def forward_atomic(
         self,
         extended_coord: torch.Tensor,
@@ -197,7 +230,7 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         Parameters
         ----------
         extended_coord
-            coodinates in extended region, (nframes, nall * 3)
+            coordinates in extended region, (nframes, nall * 3)
         extended_atype
             atomic type in extended region, (nframes, nall)
         nlist
@@ -220,11 +253,12 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         extended_coord = extended_coord.view(nframes, -1, 3)
         sorted_rcuts, sorted_sels = self._sort_rcuts_sels()
         nlists = build_multiple_neighbor_list(
-            extended_coord,
+            extended_coord.detach(),
             nlist,
             sorted_rcuts,
             sorted_sels,
         )
+
         raw_nlists = [
             nlists[get_multiple_nlist_key(rcut, sel)]
             for rcut, sel in zip(self.get_model_rcuts(), self.get_model_nsels())
@@ -299,8 +333,11 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         """
         type_2_idx = {atp: idx for idx, atp in enumerate(ori_map)}
         # this maps the atype in the new map to the original map
-        mapping = torch.tensor(  # pylint: disable=no-explicit-dtype
-            [type_2_idx[new_map[idx]] for idx in range(len(new_map))], device=env.DEVICE
+        # int32 should be enough for number of atom types.
+        mapping = torch.tensor(
+            [type_2_idx[new_map[idx]] for idx in range(len(new_map))],
+            device=env.DEVICE,
+            dtype=torch.int32,
         )
         return mapping
 
@@ -332,7 +369,7 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
 
     @classmethod
     def deserialize(cls, data: dict) -> "LinearEnergyAtomicModel":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 2), 2, 1)
         data.pop("@class", None)
         data.pop("type", None)
@@ -423,7 +460,7 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         stat_file_path: Optional[DPPath] = None,
-    ):
+    ) -> None:
         """
         Compute the output statistics (e.g. energy bias) for the fitting net from packed data.
 
@@ -447,7 +484,7 @@ class LinearEnergyAtomicModel(BaseAtomicModel):
         self,
         sampled_func,
         stat_file_path: Optional[DPPath] = None,
-    ):
+    ) -> None:
         """
         Compute or load the statistics parameters of the model,
         such as mean and standard deviation of descriptors or the energy bias of the fitting net.
@@ -484,7 +521,7 @@ class DPZBLLinearEnergyAtomicModel(LinearEnergyAtomicModel):
         Mapping atom type to the name (str) of the type.
         For example `type_map[1]` gives the name of the type 1.
     smin_alpha
-        The short-range tabulated interaction will be swithed according to the distance of the nearest neighbor.
+        The short-range tabulated interaction will be switched according to the distance of the nearest neighbor.
         This distance is calculated by softmin.
     """
 
@@ -497,7 +534,7 @@ class DPZBLLinearEnergyAtomicModel(LinearEnergyAtomicModel):
         type_map: list[str],
         smin_alpha: Optional[float] = 0.1,
         **kwargs,
-    ):
+    ) -> None:
         models = [dp_model, zbl_model]
         kwargs["models"] = models
         kwargs["type_map"] = type_map
@@ -526,7 +563,7 @@ class DPZBLLinearEnergyAtomicModel(LinearEnergyAtomicModel):
 
     @classmethod
     def deserialize(cls, data) -> "DPZBLLinearEnergyAtomicModel":
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         models = [
             BaseAtomicModel.get_class_by_type(model["type"]).deserialize(model)

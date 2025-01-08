@@ -27,7 +27,7 @@ from ...seed import (
 
 
 class FakeDescriptor:
-    def __init__(self, ntypes, embedding_width):
+    def __init__(self, ntypes, embedding_width) -> None:
         self._ntypes = ntypes
         self._dim_out = embedding_width
 
@@ -84,7 +84,7 @@ def base_fitting_net(dp_fn, embedding, natoms, atype):
 
 
 class TestFittingNet(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         nloc = 7
         self.embedding_width = 30
         self.natoms = np.array([nloc, nloc, 2, 5], dtype=np.int32)
@@ -104,7 +104,7 @@ class TestFittingNet(unittest.TestCase):
         )
         self.dp_fn.bias_atom_e = rng.uniform(size=[self.ntypes])
 
-    def test_consistency(self):
+    def test_consistency(self) -> None:
         dp_energy, values = base_fitting_net(
             self.dp_fn, self.embedding, self.natoms, self.atype
         )
@@ -133,7 +133,7 @@ class TestFittingNet(unittest.TestCase):
             assert key is not None
             var = values[key]
             with torch.no_grad():
-                # Keep parameter value consistency between 2 implentations
+                # Keep parameter value consistency between 2 implementations
                 param.data.copy_(torch.from_numpy(var))
         embedding = torch.from_numpy(self.embedding)
         embedding = embedding.view(4, -1, self.embedding_width)

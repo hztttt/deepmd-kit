@@ -9,6 +9,7 @@ from typing import (
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from deepmd.dpmodel.utils.seed import (
     child_seed,
@@ -58,10 +59,33 @@ from deepmd.pt.model.network.mlp import (
 from deepmd.pt.utils.exclude_mask import (
     PairExcludeMask,
 )
+from deepmd.pt.utils.tabulate import (
+    DPTabulate,
+)
+from deepmd.pt.utils.utils import (
+    ActivationFn,
+)
 
 from .base_descriptor import (
     BaseDescriptor,
 )
+
+if not hasattr(torch.ops.deepmd, "tabulate_fusion_se_t"):
+
+    def tabulate_fusion_se_t(
+        argument0: torch.Tensor,
+        argument1: torch.Tensor,
+        argument2: torch.Tensor,
+        argument3: torch.Tensor,
+        argument4: int,
+    ) -> list[torch.Tensor]:
+        raise NotImplementedError(
+            "tabulate_fusion_se_t is not available since customized PyTorch OP library is not built when freezing the model. "
+            "See documentation for model compression for details."
+        )
+
+    # Note: this hack cannot actually save a model that can be runned using LAMMPS.
+    torch.ops.deepmd.tabulate_fusion_se_t = tabulate_fusion_se_t
 
 
 @BaseDescriptor.register("se_e3")
@@ -123,12 +147,14 @@ class DescrptSeT(BaseDescriptor, torch.nn.Module):
         ntypes: Optional[int] = None,  # to be compat with input
         # not implemented
         spin=None,
-    ):
+    ) -> None:
         del ntypes
         if spin is not None:
             raise NotImplementedError("old implementation of spin is not supported.")
         super().__init__()
         self.type_map = type_map
+        self.compress = False
+        self.prec = PRECISION_DICT[precision]
         self.seat = DescrptBlockSeT(
             rcut,
             rcut_smth,
@@ -194,11 +220,11 @@ class DescrptSeT(BaseDescriptor, torch.nn.Module):
         """Returns the protection of building environment matrix."""
         return self.seat.get_env_protection()
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> None:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         assert (
             self.__class__ == base_class.__class__
@@ -252,10 +278,58 @@ class DescrptSeT(BaseDescriptor, torch.nn.Module):
         """
         return self.seat.compute_input_stats(merged, path)
 
+    def enable_compression(
+        self,
+        min_nbor_dist: float,
+        table_extrapolate: float = 5,
+        table_stride_1: float = 0.01,
+        table_stride_2: float = 0.1,
+        check_frequency: int = -1,
+    ) -> None:
+        """Receive the statisitcs (distance, max_nbor_size and env_mat_range) of the training data.
+
+        Parameters
+        ----------
+        min_nbor_dist
+            The nearest distance between atoms
+        table_extrapolate
+            The scale of model extrapolation
+        table_stride_1
+            The uniform stride of the first table
+        table_stride_2
+            The uniform stride of the second table
+        check_frequency
+            The overflow check frequency
+        """
+        if self.compress:
+            raise ValueError("Compression is already enabled.")
+        data = self.serialize()
+        self.table = DPTabulate(
+            self,
+            data["neuron"],
+            exclude_types=data["exclude_types"],
+            activation_fn=ActivationFn(data["activation_function"]),
+        )
+        stride_1_scaled = table_stride_1 * 10
+        stride_2_scaled = table_stride_2 * 10
+        self.table_config = [
+            table_extrapolate,
+            stride_1_scaled,
+            stride_2_scaled,
+            check_frequency,
+        ]
+        self.lower, self.upper = self.table.build(
+            min_nbor_dist, table_extrapolate, stride_1_scaled, stride_2_scaled
+        )
+        self.seat.enable_compression(
+            self.table.data, self.table_config, self.lower, self.upper
+        )
+        self.compress = True
+
     def reinit_exclude(
         self,
         exclude_types: list[tuple[int, int]] = [],
-    ):
+    ) -> None:
         """Update the type exclusions."""
         self.seat.reinit_exclude(exclude_types)
 
@@ -300,7 +374,18 @@ class DescrptSeT(BaseDescriptor, torch.nn.Module):
             The smooth switch function.
 
         """
-        return self.seat.forward(nlist, coord_ext, atype_ext, None, mapping)
+        # cast the input to internal precsion
+        coord_ext = coord_ext.to(dtype=self.prec)
+        g1, rot_mat, g2, h2, sw = self.seat.forward(
+            nlist, coord_ext, atype_ext, None, mapping
+        )
+        return (
+            g1.to(dtype=env.GLOBAL_PT_FLOAT_PRECISION),
+            None,
+            None,
+            None,
+            sw.to(dtype=env.GLOBAL_PT_FLOAT_PRECISION),
+        )
 
     def set_stat_mean_and_stddev(
         self,
@@ -372,7 +457,7 @@ class DescrptSeT(BaseDescriptor, torch.nn.Module):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
@@ -411,7 +496,7 @@ class DescrptBlockSeT(DescriptorBlock):
         precision: str = "float64",
         trainable: bool = True,
         seed: Optional[Union[int, list[int]]] = None,
-    ):
+    ) -> None:
         r"""Construct an embedding net of type `se_e3`.
 
         The embedding takes angles between two neighboring atoms as input.
@@ -446,8 +531,8 @@ class DescrptBlockSeT(DescriptorBlock):
             Random seed for initializing the network parameters.
         """
         super().__init__()
-        self.rcut = rcut
-        self.rcut_smth = rcut_smth
+        self.rcut = float(rcut)
+        self.rcut_smth = float(rcut_smth)
         self.neuron = neuron
         self.filter_neuron = self.neuron
         self.set_davg_zero = set_davg_zero
@@ -496,6 +581,21 @@ class DescrptBlockSeT(DescriptorBlock):
         for param in self.parameters():
             param.requires_grad = trainable
 
+        # add for compression
+        self.compress = False
+        self.compress_info = nn.ParameterList(
+            [
+                nn.Parameter(torch.zeros(0, dtype=self.prec, device="cpu"))
+                for _ in range(len(self.filter_layers.networks))
+            ]
+        )
+        self.compress_data = nn.ParameterList(
+            [
+                nn.Parameter(torch.zeros(0, dtype=self.prec, device=env.DEVICE))
+                for _ in range(len(self.filter_layers.networks))
+            ]
+        )
+
     def get_rcut(self) -> float:
         """Returns the cut-off radius."""
         return self.rcut
@@ -529,11 +629,11 @@ class DescrptBlockSeT(DescriptorBlock):
         return self.dim_in
 
     def mixed_types(self) -> bool:
-        """If true, the discriptor
+        """If true, the descriptor
         1. assumes total number of atoms aligned across frames;
         2. requires a neighbor list that does not distinguish different atomic types.
 
-        If false, the discriptor
+        If false, the descriptor
         1. assumes total number of atoms of each atom type aligned across frames;
         2. requires a neighbor list that distinguishes different atomic types.
 
@@ -550,11 +650,11 @@ class DescrptBlockSeT(DescriptorBlock):
         return self.filter_neuron[-1]
 
     @property
-    def dim_in(self):
+    def dim_in(self) -> int:
         """Returns the atomic input dimension of this descriptor."""
         return 0
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ("avg", "data_avg", "davg"):
             self.mean = value
         elif key in ("std", "data_std", "dstd"):
@@ -574,7 +674,7 @@ class DescrptBlockSeT(DescriptorBlock):
         self,
         merged: Union[Callable[[], list[dict]], list[dict]],
         path: Optional[DPPath] = None,
-    ):
+    ) -> None:
         """
         Compute the input statistics (e.g. mean and stddev) for the descriptors from packed data.
 
@@ -606,8 +706,12 @@ class DescrptBlockSeT(DescriptorBlock):
         self.stats = env_mat_stat.stats
         mean, stddev = env_mat_stat()
         if not self.set_davg_zero:
-            self.mean.copy_(torch.tensor(mean, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
-        self.stddev.copy_(torch.tensor(stddev, device=env.DEVICE))  # pylint: disable=no-explicit-dtype
+            self.mean.copy_(
+                torch.tensor(mean, device=env.DEVICE, dtype=self.mean.dtype)
+            )
+        self.stddev.copy_(
+            torch.tensor(stddev, device=env.DEVICE, dtype=self.stddev.dtype)
+        )
 
     def get_stats(self) -> dict[str, StatItem]:
         """Get the statistics of the descriptor."""
@@ -620,9 +724,38 @@ class DescrptBlockSeT(DescriptorBlock):
     def reinit_exclude(
         self,
         exclude_types: list[tuple[int, int]] = [],
-    ):
+    ) -> None:
         self.exclude_types = exclude_types
         self.emask = PairExcludeMask(self.ntypes, exclude_types=exclude_types)
+
+    def enable_compression(
+        self,
+        table_data,
+        table_config,
+        lower,
+        upper,
+    ) -> None:
+        for embedding_idx, ll in enumerate(self.filter_layers.networks):
+            ti = embedding_idx % self.ntypes
+            tj = embedding_idx // self.ntypes
+            if ti <= tj:
+                net = "filter_" + str(ti) + "_net_" + str(tj)
+                info_ii = torch.as_tensor(
+                    [
+                        lower[net],
+                        upper[net],
+                        upper[net] * table_config[0],
+                        table_config[1],
+                        table_config[2],
+                        table_config[3],
+                    ],
+                    dtype=self.prec,
+                    device="cpu",
+                )
+                tensor_data_ii = table_data[net].to(device=env.DEVICE, dtype=self.prec)
+                self.compress_data[embedding_idx] = tensor_data_ii
+                self.compress_info[embedding_idx] = info_ii
+        self.compress = True
 
     def forward(
         self,
@@ -631,6 +764,7 @@ class DescrptBlockSeT(DescriptorBlock):
         extended_atype: torch.Tensor,
         extended_atype_embd: Optional[torch.Tensor] = None,
         mapping: Optional[torch.Tensor] = None,
+        type_embedding: Optional[torch.Tensor] = None,
     ):
         """Compute the descriptor.
 
@@ -646,6 +780,9 @@ class DescrptBlockSeT(DescriptorBlock):
             The extended type embedding of atoms. shape: nf x nall
         mapping
             The index mapping, not required by this descriptor.
+        type_embedding
+            Full type embeddings. shape: (ntypes+1) x nt
+            Required for stripped type embeddings.
 
         Returns
         -------
@@ -680,7 +817,6 @@ class DescrptBlockSeT(DescriptorBlock):
             protection=self.env_protection,
         )
         dmatrix = dmatrix.view(-1, self.nnei, 4)
-        dmatrix = dmatrix.to(dtype=self.prec)
         nfnl = dmatrix.shape[0]
         # pre-allocate a shape to pass jit
         result = torch.zeros(
@@ -690,7 +826,9 @@ class DescrptBlockSeT(DescriptorBlock):
         )
         # nfnl x nnei
         exclude_mask = self.emask(nlist, extended_atype).view(nfnl, self.nnei)
-        for embedding_idx, ll in enumerate(self.filter_layers.networks):
+        for embedding_idx, (ll, compress_data_ii, compress_info_ii) in enumerate(
+            zip(self.filter_layers.networks, self.compress_data, self.compress_info)
+        ):
             ti = embedding_idx % self.ntypes
             nei_type_j = self.sel[ti]
             tj = embedding_idx // self.ntypes
@@ -707,18 +845,28 @@ class DescrptBlockSeT(DescriptorBlock):
                 rr_j = rr_j * mm_j[:, :, None]
                 # nfnl x nt_i x nt_j
                 env_ij = torch.einsum("ijm,ikm->ijk", rr_i, rr_j)
-                # nfnl x nt_i x nt_j x 1
-                env_ij_reshape = env_ij.unsqueeze(-1)
-                # nfnl x nt_i x nt_j x ng
-                gg = ll.forward(env_ij_reshape)
-                # nfnl x nt_i x nt_j x ng
-                res_ij = torch.einsum("ijk,ijkm->im", env_ij, gg)
+                if self.compress:
+                    ebd_env_ij = env_ij.view(-1, 1)
+                    res_ij = torch.ops.deepmd.tabulate_fusion_se_t(
+                        compress_data_ii.contiguous(),
+                        compress_info_ii.cpu().contiguous(),
+                        ebd_env_ij.contiguous(),
+                        env_ij.contiguous(),
+                        self.filter_neuron[-1],
+                    )[0]
+                else:
+                    # nfnl x nt_i x nt_j x 1
+                    env_ij_reshape = env_ij.unsqueeze(-1)
+                    # nfnl x nt_i x nt_j x ng
+                    gg = ll.forward(env_ij_reshape)
+                    # nfnl x nt_i x nt_j x ng
+                    res_ij = torch.einsum("ijk,ijkm->im", env_ij, gg)
                 res_ij = res_ij * (1.0 / float(nei_type_i) / float(nei_type_j))
                 result += res_ij
         # xyz_scatter /= (self.nnei * self.nnei)
         result = result.view(nf, nloc, self.filter_neuron[-1])
         return (
-            result.to(dtype=env.GLOBAL_PT_FLOAT_PRECISION),
+            result,
             None,
             None,
             None,

@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 import logging
 from abc import (
     abstractmethod,
@@ -55,11 +54,11 @@ class Fitting(torch.nn.Module, BaseFitting):
             return BaseFitting.__new__(BaseFitting, *args, **kwargs)
         return super().__new__(cls)
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> None:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         assert (
             self.__class__ == base_class.__class__
@@ -96,7 +95,7 @@ class GeneralFitting(Fitting):
     neuron : list[int]
         Number of neurons in each hidden layers of the fitting net.
     bias_atom_e : torch.Tensor, optional
-        Average enery per atom for each element.
+        Average energy per atom for each element.
     resnet_dt : bool
         Using time-step in the ResNet construction.
     numb_fparam : int
@@ -121,11 +120,13 @@ class GeneralFitting(Fitting):
         Now this only supports setting all the parameters in the fitting net at one state.
         When in list[bool], the trainable will be True only if all the boolean parameters are True.
     remove_vaccum_contribution: list[bool], optional
-        Remove vaccum contribution before the bias is added. The list assigned each
+        Remove vacuum contribution before the bias is added. The list assigned each
         type. For `mixed_types` provide `[True]`, otherwise it should be a list of the same
-        length as `ntypes` signaling if or not removing the vaccum contribution for the atom types in the list.
+        length as `ntypes` signaling if or not removing the vacuum contribution for the atom types in the list.
     type_map: list[str], Optional
         A list of strings. Give the name to each type of atoms.
+    use_aparam_as_mask: bool
+        If True, the aparam will not be used in fitting net for embedding.
     """
 
     def __init__(
@@ -147,8 +148,9 @@ class GeneralFitting(Fitting):
         trainable: Union[bool, list[bool]] = True,
         remove_vaccum_contribution: Optional[list[bool]] = None,
         type_map: Optional[list[str]] = None,
+        use_aparam_as_mask: bool = False,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__()
         self.var_name = var_name
         self.ntypes = ntypes
@@ -164,6 +166,7 @@ class GeneralFitting(Fitting):
         self.rcond = rcond
         self.seed = seed
         self.type_map = type_map
+        self.use_aparam_as_mask = use_aparam_as_mask
         # order matters, should be place after the assignment of ntypes
         self.reinit_exclude(exclude_types)
         self.trainable = trainable
@@ -177,7 +180,9 @@ class GeneralFitting(Fitting):
         # init constants
         if bias_atom_e is None:
             bias_atom_e = np.zeros([self.ntypes, net_dim_out], dtype=np.float64)
-        bias_atom_e = torch.tensor(bias_atom_e, dtype=self.prec, device=device)
+        bias_atom_e = torch.tensor(
+            bias_atom_e, dtype=env.GLOBAL_PT_FLOAT_PRECISION, device=device
+        )
         bias_atom_e = bias_atom_e.view([self.ntypes, net_dim_out])
         if not self.mixed_types:
             assert self.ntypes == bias_atom_e.shape[0], "Element count mismatches!"
@@ -206,7 +211,11 @@ class GeneralFitting(Fitting):
         else:
             self.aparam_avg, self.aparam_inv_std = None, None
 
-        in_dim = self.dim_descrpt + self.numb_fparam + self.numb_aparam
+        in_dim = (
+            self.dim_descrpt
+            + self.numb_fparam
+            + (0 if self.use_aparam_as_mask else self.numb_aparam)
+        )
 
         self.filter_layers = NetworkCollection(
             1 if not self.mixed_types else 0,
@@ -233,7 +242,7 @@ class GeneralFitting(Fitting):
     def reinit_exclude(
         self,
         exclude_types: list[int] = [],
-    ):
+    ) -> None:
         self.exclude_types = exclude_types
         self.emask = AtomExcludeMask(self.ntypes, self.exclude_types)
 
@@ -291,19 +300,18 @@ class GeneralFitting(Fitting):
             # "trainable": self.trainable ,
             # "atom_ener": self.atom_ener ,
             # "layer_name": self.layer_name ,
-            # "use_aparam_as_mask": self.use_aparam_as_mask ,
             # "spin": self.spin ,
             ## NOTICE:  not supported by far
             "tot_ener_zero": False,
             "trainable": [self.trainable] * (len(self.neuron) + 1),
             "layer_name": None,
-            "use_aparam_as_mask": False,
+            "use_aparam_as_mask": self.use_aparam_as_mask,
             "spin": None,
         }
 
     @classmethod
     def deserialize(cls, data: dict) -> "GeneralFitting":
-        data = copy.deepcopy(data)
+        data = data.copy()
         variables = data.pop("@variables")
         nets = data.pop("nets")
         obj = cls(**data)
@@ -341,7 +349,7 @@ class GeneralFitting(Fitting):
         """Get the name to each type of atoms."""
         return self.type_map
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ["bias_atom_e"]:
             value = value.view([self.ntypes, self._net_out_dim()])
             self.bias_atom_e = value
@@ -395,12 +403,16 @@ class GeneralFitting(Fitting):
         fparam: Optional[torch.Tensor] = None,
         aparam: Optional[torch.Tensor] = None,
     ):
-        xx = descriptor
+        # cast the input to internal precsion
+        xx = descriptor.to(self.prec)
+        fparam = fparam.to(self.prec) if fparam is not None else None
+        aparam = aparam.to(self.prec) if aparam is not None else None
+
         if self.remove_vaccum_contribution is not None:
             # TODO: compute the input for vaccm when remove_vaccum_contribution is set
-            # Idealy, the input for vaccum should be computed;
+            # Ideally, the input for vacuum should be computed;
             # we consider it as always zero for convenience.
-            # Needs a compute_input_stats for vaccum passed from the
+            # Needs a compute_input_stats for vacuum passed from the
             # descriptor.
             xx_zeros = torch.zeros_like(xx)
         else:
@@ -410,8 +422,8 @@ class GeneralFitting(Fitting):
 
         if nd != self.dim_descrpt:
             raise ValueError(
-                "get an input descriptor of dim {nd},"
-                "which is not consistent with {self.dim_descrpt}."
+                f"get an input descriptor of dim {nd},"
+                f"which is not consistent with {self.dim_descrpt}."
             )
         # check fparam dim, concate to input descriptor
         if self.numb_fparam > 0:
@@ -439,7 +451,7 @@ class GeneralFitting(Fitting):
                     dim=-1,
                 )
         # check aparam dim, concate to input descriptor
-        if self.numb_aparam > 0:
+        if self.numb_aparam > 0 and not self.use_aparam_as_mask:
             assert aparam is not None, "aparam should not be None"
             assert self.aparam_avg is not None
             assert self.aparam_inv_std is not None
@@ -465,14 +477,16 @@ class GeneralFitting(Fitting):
 
         outs = torch.zeros(
             (nf, nloc, net_dim_out),
-            dtype=env.GLOBAL_PT_FLOAT_PRECISION,
+            dtype=self.prec,
             device=descriptor.device,
         )  # jit assertion
         if self.mixed_types:
-            atom_property = self.filter_layers.networks[0](xx) + self.bias_atom_e[atype]
+            atom_property = self.filter_layers.networks[0](xx)
             if xx_zeros is not None:
                 atom_property -= self.filter_layers.networks[0](xx_zeros)
-            outs = outs + atom_property  # Shape is [nframes, natoms[0], net_dim_out]
+            outs = (
+                outs + atom_property + self.bias_atom_e[atype].to(self.prec)
+            )  # Shape is [nframes, natoms[0], net_dim_out]
         else:
             for type_i, ll in enumerate(self.filter_layers.networks):
                 mask = (atype == type_i).unsqueeze(-1)
@@ -486,13 +500,13 @@ class GeneralFitting(Fitting):
                         and not self.remove_vaccum_contribution[type_i]
                     ):
                         atom_property -= ll(xx_zeros)
-                atom_property = atom_property + self.bias_atom_e[type_i]
-                atom_property = atom_property * mask
+                atom_property = atom_property + self.bias_atom_e[type_i].to(self.prec)
+                atom_property = torch.where(mask, atom_property, 0.0)
                 outs = (
                     outs + atom_property
                 )  # Shape is [nframes, natoms[0], net_dim_out]
         # nf x nloc
-        mask = self.emask(atype)
+        mask = self.emask(atype).to(torch.bool)
         # nf x nloc x nod
-        outs = outs * mask[:, :, None]
-        return {self.var_name: outs.to(env.GLOBAL_PT_FLOAT_PRECISION)}
+        outs = torch.where(mask[:, :, None], outs, 0.0)
+        return {self.var_name: outs}

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-import copy
 import itertools
 from typing import (
     Any,
+    NoReturn,
     Optional,
     Union,
 )
@@ -16,6 +16,7 @@ from deepmd.dpmodel import (
     NativeOP,
 )
 from deepmd.dpmodel.common import (
+    cast_precision,
     to_numpy_array,
 )
 from deepmd.dpmodel.utils import (
@@ -29,9 +30,6 @@ from deepmd.dpmodel.utils.seed import (
 )
 from deepmd.dpmodel.utils.update_sel import (
     UpdateSel,
-)
-from deepmd.env import (
-    GLOBAL_NP_FLOAT_PRECISION,
 )
 from deepmd.utils.data_system import (
     DeepmdDataSystem,
@@ -218,7 +216,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         self.orig_sel = self.sel
         self.sel_cumsum = [0, *np.cumsum(self.sel).tolist()]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         if key in ("avg", "data_avg", "davg"):
             self.davg = value
         elif key in ("std", "data_std", "dstd"):
@@ -259,7 +257,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         """Returns cutoff radius."""
         return self.sel
 
-    def mixed_types(self):
+    def mixed_types(self) -> bool:
         """Returns if the descriptor requires a neighbor list that distinguish different
         atomic types or not.
         """
@@ -277,11 +275,11 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         """Returns the protection of building environment matrix."""
         return self.env_protection
 
-    def share_params(self, base_class, shared_level, resume=False):
+    def share_params(self, base_class, shared_level, resume=False) -> NoReturn:
         """
         Share the parameters of self to the base_class with shared_level during multitask training.
         If not start from checkpoint (resume is False),
-        some seperated parameters (e.g. mean and stddev) will be re-calculated across different classes.
+        some separated parameters (e.g. mean and stddev) will be re-calculated across different classes.
         """
         raise NotImplementedError
 
@@ -305,7 +303,9 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         """Get the name to each type of atoms."""
         return self.type_map
 
-    def compute_input_stats(self, merged: list[dict], path: Optional[DPPath] = None):
+    def compute_input_stats(
+        self, merged: list[dict], path: Optional[DPPath] = None
+    ) -> NoReturn:
         """Update mean and stddev for descriptor elements."""
         raise NotImplementedError
 
@@ -337,10 +337,11 @@ class DescrptSeA(NativeOP, BaseDescriptor):
     def reinit_exclude(
         self,
         exclude_types: list[tuple[int, int]] = [],
-    ):
+    ) -> None:
         self.exclude_types = exclude_types
         self.emask = PairExcludeMask(self.ntypes, exclude_types=exclude_types)
 
+    @cast_precision
     def call(
         self,
         coord_ext,
@@ -359,7 +360,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         nlist
             The neighbor list. shape: nf x nloc x nnei
         mapping
-            The index mapping from extended to lcoal region. not used by this descriptor.
+            The index mapping from extended to local region. not used by this descriptor.
 
         Returns
         -------
@@ -416,9 +417,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         # nf x nloc x ng x ng1
         grrg = np.einsum("flid,fljd->flij", gr, gr1)
         # nf x nloc x (ng x ng1)
-        grrg = grrg.reshape(nf, nloc, ng * self.axis_neuron).astype(
-            GLOBAL_NP_FLOAT_PRECISION
-        )
+        grrg = grrg.reshape(nf, nloc, ng * self.axis_neuron)
         return grrg, gr[..., 1:], None, None, ww
 
     def serialize(self) -> dict:
@@ -460,7 +459,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
     @classmethod
     def deserialize(cls, data: dict) -> "DescrptSeA":
         """Deserialize from dict."""
-        data = copy.deepcopy(data)
+        data = data.copy()
         check_version_compatibility(data.pop("@version", 1), 2, 1)
         data.pop("@class", None)
         data.pop("type", None)
@@ -486,7 +485,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
@@ -507,6 +506,7 @@ class DescrptSeA(NativeOP, BaseDescriptor):
 
 
 class DescrptSeAArrayAPI(DescrptSeA):
+    @cast_precision
     def call(
         self,
         coord_ext,
@@ -525,7 +525,7 @@ class DescrptSeAArrayAPI(DescrptSeA):
         nlist
             The neighbor list. shape: nf x nloc x nnei
         mapping
-            The index mapping from extended to lcoal region. not used by this descriptor.
+            The index mapping from extended to local region. not used by this descriptor.
 
         Returns
         -------
@@ -555,7 +555,7 @@ class DescrptSeAArrayAPI(DescrptSeA):
             coord_ext, atype_ext, nlist, self.davg, self.dstd
         )
         nf, nloc, nnei, _ = rr.shape
-        sec = xp.asarray(self.sel_cumsum)
+        sec = self.sel_cumsum
 
         ng = self.neuron[-1]
         gr = xp.zeros([nf * nloc, ng, 4], dtype=self.dstd.dtype)
@@ -586,7 +586,5 @@ class DescrptSeAArrayAPI(DescrptSeA):
         # grrg = xp.einsum("flid,fljd->flij", gr, gr1)
         grrg = xp.sum(gr[:, :, :, None, :] * gr1[:, :, None, :, :], axis=4)
         # nf x nloc x (ng x ng1)
-        grrg = xp.astype(
-            xp.reshape(grrg, (nf, nloc, ng * self.axis_neuron)), input_dtype
-        )
+        grrg = xp.reshape(grrg, (nf, nloc, ng * self.axis_neuron))
         return grrg, gr[..., 1:], None, None, ww

@@ -48,7 +48,7 @@ class LinearModel(Model):
         If "sum", the weights are set to be 1.
     """
 
-    def __init__(self, models: list[dict], weights: list[float], **kwargs):
+    def __init__(self, models: list[dict], weights: list[float], **kwargs) -> None:
         super().__init__(**kwargs)
         self.models = [Model(**model) for model in models]
         if isinstance(weights, list):
@@ -90,7 +90,7 @@ class LinearModel(Model):
                 raise ValueError("Models have different ntypes")
         return self.models[0].get_ntypes()
 
-    def data_stat(self, data):
+    def data_stat(self, data) -> None:
         for model in self.models:
             model.data_stat(data)
 
@@ -146,7 +146,7 @@ class LinearModel(Model):
         Parameters
         ----------
         train_data : DeepmdDataSystem
-            data used to do neighbor statictics
+            data used to do neighbor statistics
         type_map : list[str], optional
             The name of each type of atoms
         local_jdata : dict
